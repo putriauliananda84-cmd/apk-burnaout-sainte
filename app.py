@@ -845,11 +845,21 @@ app.jinja_loader = DictLoader(PAGES)
 
 @app.route("/admin")
 def admin():
-    users = User.query.all()
-    html = "<h1>Data User TenangTugas</h1><table border='1' cellpadding='10'><tr><th>ID</th><th>Nama</th><th>Email</th></tr>"
-    for u in users:
-        html += f"<tr><td>{u.id}</td><td>{u.name}</td><td>{u.email}</td></tr>"
-    html += "</table><br><a href='/'>Balik ke Home</a>"
-    return html
+    try:
+        users = User.query.all()
+        cols = [c.name for c in User.__table__.columns]
+        html = f"<h1>Data User TenangTugas</h1><p>Kolom: {cols}</p><table border='1' cellpadding='10'><tr>"
+        for col in cols:
+            html += f"<th>{col}</th>"
+        html += "</tr>"
+        for u in users:
+            html += "<tr>"
+            for col in cols:
+                html += f"<td>{getattr(u, col, '')}</td>"
+            html += "</tr>"
+        html += "</table><br><a href='/'>Balik ke Home</a>"
+        return html
+    except Exception as e:
+        return f"Error: {e}"
 if __name__ == "__main__":
     app.run(debug=os.environ.get("FLASK_DEBUG") == "1")
