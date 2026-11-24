@@ -845,21 +845,41 @@ app.jinja_loader = DictLoader(PAGES)
 
 @app.route("/admin")
 def admin():
-    try:
-        users = User.query.all()
-        cols = [c.name for c in User.__table__.columns]
-        html = f"<h1>Data User TenangTugas</h1><p>Kolom: {cols}</p><table border='1' cellpadding='10'><tr>"
-        for col in cols:
-            html += f"<th>{col}</th>"
-        html += "</tr>"
-        for u in users:
-            html += "<tr>"
-            for col in cols:
-                html += f"<td>{getattr(u, col, '')}</td>"
-            html += "</tr>"
-        html += "</table><br><a href='/'>Balik ke Home</a>"
-        return html
-    except Exception as e:
-        return f"Error: {e}"
+    import sqlite3, os, glob
+    # Cari file database-nya dimana aja
+    paths = ["/tmp/tenangtugas.db", "tenangtugas.db", "instance/tenangtugas.db"] + glob.glob("/tmp/*.db") + glob.glob("*.db") + glob.glob("instance/*.db")
+    html = "<h1>Data Database TenangTugas</h1>"
+    for p in paths:
+        if not os.path.exists(p):
+            continue
+        html += f"<h2>File: {p}</h2>"
+        try:
+            con = sqlite3.connect(p)
+            con.row_factory = sqlite3.Row
+            cur = con.cursor()
+            tables = cur.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+            for t in tables:
+                tname = t[0]
+                html += f"<h3>Tabel: {tname}</h3>"
+                rows = cur.execute(f"SELECT * FROM {tname}").fetchall()
+                if not rows:
+                    html += "<p>(kosong)</p>"
+                    continue
+                cols = rows[0].keys()
+                html += "<table border='1' cellpadding='8'><tr>"
+                for c in cols:
+                    html += f"<th>{c}</th>"
+                html += "</tr>"
+                for r in rows:
+                    html += "<tr>"
+                    for c in cols:
+                        html += f"<td>{r[c]}</td>"
+                    html += "</tr>"
+                html += "</table>"
+            con.close()
+        except Exception as e:
+            html += f"<p>Error baca {p}: {e}</p>"
+    html += "<br><a href='/'>Balik ke Home</a>"
+    return html
 if __name__ == "__main__":
     app.run(debug=os.environ.get("FLASK_DEBUG") == "1")
