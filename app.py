@@ -843,5 +843,13 @@ PAGES["darurat.html"] = """{% extends 'base.html' %}{% block content %}<h1>Mode 
 
 app.jinja_loader = DictLoader(PAGES)
 
+@app.route("/admin")
+def admin():
+    users = User.query.all()
+    html = "<h1>Data User TenangTugas</h1><table border='1' cellpadding='10'><tr><th>ID</th><th>Nama</th><th>Email</th></tr>"
+    for u in users:
+        html += f"<tr><td>{u.id}</td><td>{u.name}</td><td>{u.email}</td></tr>"
+    html += "</table><br><a href='/'>Balik ke Home</a>"
+    return html
 if __name__ == "__main__":
     app.run(debug=os.environ.get("FLASK_DEBUG") == "1")
