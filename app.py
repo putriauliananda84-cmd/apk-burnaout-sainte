@@ -31,7 +31,12 @@ app.config.update(
     SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE", "false").lower() == "true",
 )
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///app.db")
+DATABASE_URL = os.environ.get("DATABASE_URL")
+if not DATABASE_URL:
+    if os.environ.get("VERCEL"):
+        DATABASE_URL = "sqlite:////tmp/tenangtugas.db"
+    else:
+        DATABASE_URL = "sqlite:///app.db"
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
 elif DATABASE_URL.startswith("postgresql://"):
