@@ -57,7 +57,7 @@ with engine.begin() as koneksi:
         )
     """))
 
-# Ganti dengan tautan layanan konseling kampus milikmu.
+# GANTI DENGAN LINK ASLI KONSELING KAMPUSMU
 KONSELING_URL = "https://www.example.ac.id/layanan-konseling"
 # Ganti ID ini dengan ID playlist Spotify Ruang Tenang milikmu.
 SPOTIFY_PLAYLIST_ID = "37i9dQZF1DX4sWSpwq3LiO"
@@ -74,15 +74,14 @@ KESULITAN = ["Mudah", "Sedang", "Sulit"]
 # Data per akun
 # ----------------------------------------------------------------------------
 STATE_AWAL = {
-    "tasks": [],         # daftar tugas
+    "tasks": [],
     "next_id": 1,
-    "stres": {},         # {date: {"skor": int, "catatan": str}}
-    "fokus_menit": 0,    # total menit fokus
-    "jurnal": [],        # catatan jurnal cepat
-    "braindump": [],     # baris Brain Dump yang menunggu diatur tenggatnya
+    "stres": {},
+    "fokus_menit": 0,
+    "jurnal": [],
+    "braindump": [],
 }
 STATE = LocalProxy(lambda: g.user_state)
-
 
 def serialisasi_state(state):
     data = state.copy()
@@ -97,7 +96,6 @@ def serialisasi_state(state):
     ]
     return json.dumps(data)
 
-
 def pulihkan_state(state_data):
     state = STATE_AWAL.copy()
     if not state_data:
@@ -110,7 +108,6 @@ def pulihkan_state(state_data):
     for catatan in state["jurnal"]:
         catatan["tgl"] = date.fromisoformat(catatan["tgl"])
     return state
-
 
 @app.before_request
 def muat_akun():
@@ -129,7 +126,6 @@ def muat_akun():
         else:
             session.clear()
 
-
 @app.after_request
 def simpan_state(response):
     if g.user is not None and session.get("user_id") == g.user["id"]:
@@ -139,7 +135,6 @@ def simpan_state(response):
                 {"state_data": serialisasi_state(g.user_state), "id": g.user["id"]},
             )
     return response
-
 
 # ----------------------------------------------------------------------------
 # Algoritma
@@ -154,13 +149,7 @@ TEMPLAT_LANGKAH = {
         "Tulis kesimpulan", "Baca ulang dan rapikan"],
 }
 
-
 def pecah_tugas(menit, kesulitan):
-    """Pecah satu tugas menjadi langkah kecil.
-
-    Jumlah langkah = perkiraan waktu / 25 menit (satu sesi fokus), dibatasi 2 sampai 6,
-    ditambah satu langkah bila tugas sulit. Langkah 'inti' mendapat porsi waktu dua kali lipat.
-    """
     n = ceil(menit / 25)
     if kesulitan == "Sulit":
         n += 1
@@ -170,48 +159,39 @@ def pecah_tugas(menit, kesulitan):
     total = sum(bobot)
     hasil = []
     for s, b in zip(nama, bobot):
-        durasi = max(5, round(menit * b / total / 5) * 5)  # kelipatan 5 menit
+        durasi = max(5, round(menit * b / total / 5) * 5)
         hasil.append({"t": s, "m": durasi, "done": False})
-    # selisih pembulatan dimasukkan ke langkah inti supaya total waktu tetap sama
     selisih = round(menit / 5) * 5 - sum(l["m"] for l in hasil)
     inti = next(l for l in hasil if "inti" in l["t"])
     inti["m"] = max(5, inti["m"] + selisih)
     return hasil
 
-
 def sisa_hari(t):
     return None if t["deadline"] is None else (t["deadline"] - date.today()).days
 
-
 def kuadran(t):
-    """Matriks prioritas: mendesak = tenggat <= 3 hari (termasuk terlambat), penting = tidak 'Mudah'."""
     s = sisa_hari(t)
     mendesak = s is not None and s <= 3
     penting = t["kesulitan"] != "Mudah"
     if mendesak and penting:
-        return 0  # Kerjakan dulu
+        return 0
     if penting:
-        return 1  # Jadwalkan
+        return 1
     if mendesak:
-        return 2  # Singkat saja
-    return 3      # Lepas dulu
-
+        return 2
+    return 3
 
 NAMA_KUADRAN = ["Kerjakan dulu", "Jadwalkan", "Singkat saja", "Lepas dulu"]
-
 
 def urut_prioritas(tugas):
     far = date.max
     return sorted(tugas, key=lambda t: (kuadran(t), t["deadline"] or far))
 
-
 def aktif():
     return [t for t in STATE["tasks"] if not t["selesai"]]
 
-
 def fokus_tiga():
     return urut_prioritas(aktif())[:3]
-
 
 def pesan_stres(skor):
     return {
@@ -222,9 +202,7 @@ def pesan_stres(skor):
         5: "Stres tinggi. Buka Mode Darurat untuk langkah terkecil dan jeda napas.",
     }[skor]
 
-
 def langkah_terkecil(n=3):
-    """Mode Darurat: ambil n langkah belum selesai dengan durasi paling pendek."""
     semua = []
     for t in aktif():
         for l in t["langkah"]:
@@ -240,9 +218,7 @@ def langkah_terkecil(n=3):
         hasil.append(c)
     return hasil
 
-
 def data_mingguan():
-    """Skor stres 7 hari terakhir. Bila belum ada catatan, pakai contoh data."""
     hari = [date.today() - timedelta(days=i) for i in range(6, -1, -1)]
     nyata = [STATE["stres"].get(d, {}).get("skor") for d in hari]
     contoh = not any(nyata)
@@ -250,16 +226,13 @@ def data_mingguan():
         nyata = [2, 3, 4, 3, 5, 2, 1]
     return [(HARI_PENDEK[d.weekday()], s or 0) for d, s in zip(hari, nyata)], contoh
 
-
 def pola_stres(data):
     puncak = max(data, key=lambda x: x[1])
     if puncak[1] == 0:
         return "Belum ada pola. Isi cek stres harian dulu."
     return f"Stresmu paling tinggi di hari {HARI[HARI_PENDEK.index(puncak[0])]}. Perhatikan tugas atau tenggat di hari itu."
 
-
 def jadwal_hari_ini(mulai="10:00"):
-    """Susun blok waktu dari langkah prioritas: blok kerja diikuti istirahat 5 menit."""
     jam = datetime.strptime(mulai, "%H:%M")
     blok = []
     for t in fokus_tiga():
@@ -277,19 +250,15 @@ def jadwal_hari_ini(mulai="10:00"):
         blok.pop()
     return blok
 
-
 def fmt_tgl(d):
     return "-" if d is None else f"{HARI[d.weekday()]}, {d.day} {BULAN[d.month - 1]} {d.year}"
-
 
 def fmt_menit(m):
     j, s = divmod(int(m), 60)
     return f"{j} j {s} m" if j else f"{s} m"
 
-
 def cari_tugas(tid):
     return next((t for t in STATE["tasks"] if t["id"] == tid), None)
-
 
 def tambah_tugas(judul, matkul, deadline, menit, kesulitan):
     t = {"id": STATE["next_id"], "judul": judul.strip(), "matkul": matkul.strip() or "-",
@@ -298,20 +267,17 @@ def tambah_tugas(judul, matkul, deadline, menit, kesulitan):
     STATE["tasks"].append(t)
     return t
 
-
 def baca_tanggal(s):
     try:
         return datetime.strptime(s, "%Y-%m-%d").date() if s else None
     except ValueError:
         return None
 
-
 def baca_menit(s, default=60):
     try:
         return max(5, int(s))
     except (TypeError, ValueError):
         return default
-
 
 def wajib_masuk(f):
     @wraps(f)
@@ -321,13 +287,11 @@ def wajib_masuk(f):
         return f(*a, **k)
     return bungkus
 
-
 @app.context_processor
 def konteks():
     return dict(user=g.user, fmt_tgl=fmt_tgl, fmt_menit=fmt_menit, css=CSS, endpoint=request.endpoint,
                 MOODS=MOODS, MOOD_EMOJI=MOOD_EMOJI, KESULITAN=KESULITAN, sisa_hari=sisa_hari,
                 kuadran=kuadran, NAMA_KUADRAN=NAMA_KUADRAN, KONSELING_URL=KONSELING_URL)
-
 
 # ----------------------------------------------------------------------------
 # Rute: akun dan panduan
@@ -335,7 +299,6 @@ def konteks():
 @app.route("/")
 def index():
     return redirect(url_for("beranda" if g.user else "daftar"))
-
 
 @app.route("/daftar", methods=["GET", "POST"])
 def daftar():
@@ -385,18 +348,15 @@ def daftar():
         return redirect(url_for("daftar", tab="masuk"))
     return render_template("daftar.html", tab=tab)
 
-
 @app.route("/panduan")
 @wajib_masuk
 def panduan():
     return render_template("panduan.html")
 
-
 @app.route("/keluar")
 def keluar():
     session.clear()
     return redirect(url_for("daftar", tab="masuk"))
-
 
 # ----------------------------------------------------------------------------
 # Rute: Beranda dan cek stres
@@ -412,7 +372,6 @@ FITUR = [
     ("Mode Darurat", "Saat stres tinggi: 3 langkah terkecil, napas 1 menit, dan tautan layanan konseling kampus.", "darurat", "d"),
 ]
 
-
 @app.route("/beranda")
 @wajib_masuk
 def beranda():
@@ -425,10 +384,10 @@ def beranda():
         ("Coba satu sesi fokus 25 menit", STATE["fokus_menit"] > 0),
     ]
     terdekat = sorted([t for t in aktif() if t["deadline"]], key=lambda t: t["deadline"])[:3]
+    riwayat = sorted(STATE["stres"].items(), key=lambda x: x[0], reverse=True)[:7]
     return render_template("beranda.html", ada_tugas=bool(tugas), fokus=fokus_tiga(), mulai=mulai,
-                           terdekat=terdekat, hari_ini=hari_ini, FITUR=FITUR,
+                           terdekat=terdekat, hari_ini=hari_ini, FITUR=FITUR, riwayat=riwayat,
                            pesan=pesan_stres(hari_ini["skor"]) if hari_ini else None)
-
 
 @app.route("/cek-stres", methods=["POST"])
 @wajib_masuk
@@ -438,7 +397,6 @@ def cek_stres():
         STATE["stres"][date.today()] = {"skor": MOODS.index(mood) + 1,
                                         "catatan": request.form.get("catatan", "").strip()}
     return redirect(url_for("beranda"))
-
 
 # ----------------------------------------------------------------------------
 # Rute: Brain Dump, Tugas, Pemecah Tugas
@@ -455,7 +413,6 @@ def braindump():
         return redirect(url_for("atur_tenggat"))
     return render_template("braindump.html")
 
-
 @app.route("/atur-tenggat", methods=["GET", "POST"])
 @wajib_masuk
 def atur_tenggat():
@@ -469,7 +426,6 @@ def atur_tenggat():
     if not baris:
         return redirect(url_for("braindump"))
     return render_template("atur_tenggat.html", baris=baris, default=(date.today() + timedelta(days=3)).isoformat())
-
 
 @app.route("/tugas")
 @wajib_masuk
@@ -488,7 +444,6 @@ def tugas():
         hasil = [t for t in aktif() if t["deadline"] == h]
     return render_template("tugas.html", f=f, hasil=urut_prioritas(hasil), hari_ini=h.isoformat())
 
-
 @app.route("/tugas/tambah", methods=["POST"])
 @wajib_masuk
 def tugas_tambah():
@@ -500,7 +455,6 @@ def tugas_tambah():
                      baca_menit(request.form.get("menit")), request.form.get("sulit", "Sedang"))
     return redirect(request.referrer or url_for("tugas"))
 
-
 @app.route("/tugas/<int:tid>/selesai", methods=["POST"])
 @wajib_masuk
 def tugas_selesai(tid):
@@ -509,7 +463,6 @@ def tugas_selesai(tid):
         t["selesai"] = not t["selesai"]
     return redirect(request.referrer or url_for("tugas"))
 
-
 @app.route("/tugas/<int:tid>/langkah/<int:i>", methods=["POST"])
 @wajib_masuk
 def langkah_centang(tid, i):
@@ -517,7 +470,6 @@ def langkah_centang(tid, i):
     if t and 0 <= i < len(t["langkah"]):
         t["langkah"][i]["done"] = not t["langkah"][i]["done"]
     return redirect(request.referrer or url_for("tugas"))
-
 
 @app.route("/pemecah", methods=["GET", "POST"])
 @wajib_masuk
@@ -547,7 +499,6 @@ def pemecah():
         return redirect(url_for("pemecah", id=pilih["id"]))
     return render_template("pemecah.html", daftar=aktif(), pilih=pilih)
 
-
 # ----------------------------------------------------------------------------
 # Rute: Rencana Harian, Ruang Tenang, Profil, Darurat
 # ----------------------------------------------------------------------------
@@ -562,13 +513,11 @@ def rencana():
     kuad = {i: [t for t in aktif() if kuadran(t) == i] for i in range(4)}
     return render_template("rencana.html", blok=blok, mulai=mulai, kuad=kuad, fokus_menit=STATE["fokus_menit"])
 
-
 @app.route("/fokus/selesai", methods=["POST"])
 @wajib_masuk
 def fokus_selesai():
     STATE["fokus_menit"] += 25
     return {"total": STATE["fokus_menit"]}
-
 
 @app.route("/ruang-tenang", methods=["GET", "POST"])
 @wajib_masuk
@@ -584,7 +533,6 @@ def ruang_tenang():
         spotify_playlist_id=SPOTIFY_PLAYLIST_ID,
     )
 
-
 @app.route("/profil")
 @wajib_masuk
 def profil():
@@ -594,12 +542,10 @@ def profil():
     return render_template("profil.html", data=data, contoh=contoh, pola=pola_stres(data), saran=saran,
                            selesai=sum(t["selesai"] for t in STATE["tasks"]), fokus=fmt_menit(STATE["fokus_menit"]))
 
-
 @app.route("/darurat")
 @wajib_masuk
 def darurat():
     return render_template("darurat.html", langkah=langkah_terkecil())
-
 
 # ----------------------------------------------------------------------------
 # Tampilan (CSS dan template HTML)
@@ -667,7 +613,8 @@ PAGES["base.html"] = """<!doctype html><html lang="id"><head><meta charset="utf-
 {% for ep, nama in [('beranda','Beranda'),('tugas','Tugas'),('rencana','Rencana Harian'),('ruang_tenang','Ruang Tenang'),('profil','Profil & Refleksi')] %}
 <a class="m {{ 'on' if endpoint==ep }}" href="{{ url_for(ep) }}">{{ nama }}</a>{% endfor %}
 <div class="bawah"><a class="kecil" href="{{ url_for('panduan') }}">Lihat panduan lagi</a>
-<a class="kecil kuning" href="{{ url_for('darurat') }}">Butuh Bantuan?</a></div></aside>
+<a class="kecil kuning" href="{{ url_for('darurat') }}">Butuh Bantuan?</a>
+<a class="kecil" href="{{ url_for('keluar') }}" style="background:#ffe0e0;color:#8b1e1e;font-weight:700">Logout</a></div></aside>
 <main>{% for m in get_flashed_messages() %}<div class="flash">{{ m }}</div>{% endfor %}{% block content %}{% endblock %}</main></div>{% endblock %}</body></html>"""
 
 PAGES["daftar.html"] = """{% extends 'base.html' %}{% block body %}<div class="auth"><div class="kiri"><div class="logo">TenangTugas</div>
@@ -679,11 +626,11 @@ PAGES["daftar.html"] = """{% extends 'base.html' %}{% block body %}<div class="a
 <div class="tabs"><a class="{{ 'on' if tab=='daftar' }}" href="{{ url_for('daftar') }}">Daftar</a><a class="{{ 'on' if tab=='masuk' }}" href="{{ url_for('daftar', tab='masuk') }}">Masuk</a></div>
 {% for m in get_flashed_messages() %}<div class="flash">{{ m }}</div>{% endfor %}
 {% if tab=='masuk' %}<h1>Masuk</h1><form method="post"><input type="hidden" name="aksi" value="masuk">
-<label>Email</label><input name="email" type="email" placeholder="nama@email.com"><label>Kata sandi</label><input name="sandi" type="password">
+<label>Email</label><input name="email" type="email" placeholder="nama@email.com"><label>Kata sandi</label><div style="display:flex;gap:6px"><input name="sandi" type="password" id="sandi_masuk" style="flex:1"><button type="button" class="btn o" style="padding:12px 14px;width:auto;margin:4px 0 12px" onclick="let i=document.getElementById('sandi_masuk');i.type=i.type=='password'?'text':'password'">👁️</button></div>
 <button class="btn full">Masuk</button></form>
 {% else %}<h1>Buat akunmu</h1><p class="sub">Hanya butuh satu menit. Setelah itu kami kenalkan cara memakai TenangTugas.</p>
 <form method="post"><input type="hidden" name="aksi" value="daftar"><label>Nama panggilan</label><input name="nama">
-<label>Email</label><input name="email" type="email" placeholder="nama@email.com"><label>Kata sandi</label><input name="sandi" type="password" placeholder="Minimal 8 karakter">
+<label>Email</label><input name="email" type="email" placeholder="nama@email.com"><label>Kata sandi</label><div style="display:flex;gap:6px"><input name="sandi" type="password" id="sandi_daftar" placeholder="Minimal 8 karakter" style="flex:1"><button type="button" class="btn o" style="padding:12px 14px;width:auto;margin:4px 0 12px" onclick="let i=document.getElementById('sandi_daftar');i.type=i.type=='password'?'text':'password'">👁️</button></div>
 <button class="btn full">Buat akun</button></form>{% endif %}
 <p class="meta" style="text-align:center;margin-top:18px">Catatan stres harianmu bersifat pribadi.</p></div></div></div>{% endblock %}"""
 
@@ -712,8 +659,9 @@ PAGES["beranda.html"] = """{% extends 'base.html' %}{% block content %}<h1>Halo,
 <div class="card"><h2>Bagaimana perasaanmu hari ini?</h2><form method="post" action="{{ url_for('cek_stres') }}"><div class="moods">
 {% for m in MOODS %}<label><input type="radio" name="mood" value="{{ m }}" required {{ 'checked' if hari_ini and hari_ini.skor==loop.index }}><span><b>{{ MOOD_EMOJI[loop.index0] }}</b>{{ m }}</span></label>{% endfor %}</div>
 {% if pesan %}<p><span class="pill">{{ pesan }}</span></p>{% endif %}
-<label>Apa yang paling membuatmu cemas hari ini?</label><input name="catatan" placeholder="Boleh singkat, boleh dikosongkan" value="{{ hari_ini.catatan if hari_ini else '' }}">
-<button class="btn">Simpan</button></form></div>
+<label>Apa yang paling membuatmu cemas hari ini?</label><input name="catatan" placeholder="Boleh singkat, boleh dikosongkan">
+<button class="btn">Simpan</button></form>
+{% if riwayat %}<h3 style="margin-top:16px">Riwayat Perasaanmu</h3>{% for tgl, isi in riwayat %}<p style="margin:6px 0"><b>{{ fmt_tgl(tgl) }}</b> - {{ MOOD_EMOJI[isi.skor-1] }} {{ MOODS[isi.skor-1] }}{% if isi.catatan %} - <span class="meta">{{ isi.catatan }}</span>{% endif %}</p>{% endfor %}{% endif %}</div>
 <div class="card dash"><h2>Fokus 3 tugas hari ini</h2>{% if fokus %}{% for t in fokus %}<div class="row" style="margin-bottom:8px"><span><b>{{ t.judul }}</b> <span class="meta">· {{ NAMA_KUADRAN[kuadran(t)] }}</span></span>
 <a class="btn o" href="{{ url_for('pemecah', id=t.id) }}">Pecah</a></div>{% endfor %}
 {% else %}<p class="meta">Tiga tugas prioritasmu akan muncul di sini setelah kamu menulis tugas. Hanya yang penting hari ini yang ditampilkan, supaya layar tetap lega.</p>{% endif %}</div></div>
@@ -827,6 +775,7 @@ const g=ctx.createGain();g.gain.value=0.25;sumber.connect(lp);lp.connect(g);g.co
 </script>{% endblock %}"""
 
 PAGES["profil.html"] = """{% extends 'base.html' %}{% block content %}<h1>Profil & Refleksi</h1>
+<div class="card"><div class="row"><div><h2 style="margin:0">Akun Saya</h2><p style="margin:6px 0"><b>{{ user.nama }}</b><br><span class="meta">{{ user.email }}</span><br><span class="meta">ID Akun: {{ user.id }}</span></p></div><div style="width:52px;height:52px;border-radius:50%;background:var(--g);color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;flex-shrink:0">{{ user.nama[0]|upper }}</div></div><a class="btn o" href="{{ url_for('keluar') }}">Logout</a></div>
 <p class="sub">Lihat pola stresmu minggu ini.{% if contoh %} Angka di bawah adalah contoh data sampai kamu mengisi cek stres harian.{% endif %}</p>
 <div class="grid2"><div class="card"><h2>Riwayat stres mingguan</h2><div class="bar">{% set mx = data|map(attribute=1)|max %}
 {% for h, s in data %}<div class="{{ 'max' if s==mx and s>0 }}" style="height:{{ s*20 }}%"></div>{% endfor %}</div>
@@ -846,7 +795,6 @@ app.jinja_loader = DictLoader(PAGES)
 @app.route("/admin")
 def admin():
     import sqlite3, os, glob
-    # Cari file database-nya dimana aja
     paths = ["/tmp/tenangtugas.db", "tenangtugas.db", "instance/tenangtugas.db"] + glob.glob("/tmp/*.db") + glob.glob("*.db") + glob.glob("instance/*.db")
     html = "<h1>Data Database TenangTugas</h1>"
     for p in paths:
