@@ -375,15 +375,25 @@ FITUR = [
 @app.route("/beranda")
 @wajib_masuk
 def beranda():
-    return render_template(
-        "beranda.html",
-        user=STATE["users"].get(session["user_id"]),
-        sekarang=datetime.now(),
-        hari_ini=STATE["cekin"].get(date.today().isoformat()),
-        riwayat=list(reversed(STATE["cekin"].values()))[:5],
-        streak=hitung_streak(),
-        total_cekin=len(STATE["cekin"]),
-    )
+    try:
+        u = STATE["users"].get(session["user_id"]) or {}
+        nama = u.get("nama") or u.get("name") or u.get("email") or "Teman"
+        hari_ini = STATE["cekin"].get(date.today().isoformat())
+        if hari_ini:
+            info = "Skor hari ini: " + str(hari_ini.get("skor", "-"))
+        else:
+            info = "Belum cek-in hari ini."
+        return render_template(
+            "beranda.html",
+            nama=nama,
+            tanggal=datetime.now().strftime("%d %B %Y"),
+            info=info,
+            streak=hitung_streak(),
+            total_cekin=len(STATE["cekin"]),
+        )
+    except Exception as e:
+        return "BERANDA ERROR: " + str(e), 200
+        
 @app.route("/cek-stres", methods=["POST"])
 @wajib_masuk
 def cek_stres():
