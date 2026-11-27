@@ -428,7 +428,7 @@ def atur_tenggat():
         return redirect(url_for("braindump"))
     return render_template("atur_tenggat.html", baris=baris, default=(date.today() + timedelta(days=3)).isoformat())
 
-@app.route("/kalender/<id>")
+@app.route("/kalender/<int:id>")
 def kalender(id):
     t = next((x for x in STATE["tugas"] if x["id"] == id), None)
     if not t or not t["deadline"]:
