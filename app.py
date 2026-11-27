@@ -375,8 +375,7 @@ FITUR = [
 @app.route("/beranda")
 @wajib_masuk
 def beranda():
-    return render_template("beranda.html", nama="Teman", pesan_stres="", fokus_tiga=[], terdekat=[], ada_mendesak=False, sekarang=None, mulai=[], riwayat=[], hari_ini=None, pesan=None)
-
+    return "Beranda OK"
 @app.route("/cek-stres", methods=["POST"])
 @wajib_masuk
 def cek_stres():
