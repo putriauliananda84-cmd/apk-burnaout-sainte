@@ -375,7 +375,15 @@ FITUR = [
 @app.route("/beranda")
 @wajib_masuk
 def beranda():
-    return "Beranda OK"
+    return render_template(
+        "beranda.html",
+        user=STATE["users"].get(session["user_id"]),
+        sekarang=datetime.now(),
+        hari_ini=STATE["cekin"].get(date.today().isoformat()),
+        riwayat=list(reversed(STATE["cekin"].values()))[:5],
+        streak=hitung_streak(),
+        total_cekin=len(STATE["cekin"]),
+    )
 @app.route("/cek-stres", methods=["POST"])
 @wajib_masuk
 def cek_stres():
