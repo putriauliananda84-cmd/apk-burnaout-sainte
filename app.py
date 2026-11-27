@@ -9,6 +9,7 @@ Lalu buka http://127.0.0.1:5000 di browser.
 Data akun dan aplikasi disimpan di database; lokal memakai SQLite, hosting memakai DATABASE_URL.
 Web ini bukan pengganti layanan kesehatan mental.
 """
+import copy
 import json
 import os
 import uuid
@@ -84,7 +85,7 @@ STATE_AWAL = {
 STATE = LocalProxy(lambda: g.user_state)
 
 def serialisasi_state(state):
-    data = state.copy()
+    data = copy.deepcopy(state)
     data["stres"] = {hari.isoformat(): nilai for hari, nilai in state["stres"].items()}
     data["tasks"] = [
         {**tugas, "deadline": tugas["deadline"].isoformat() if tugas["deadline"] else None}
@@ -97,7 +98,7 @@ def serialisasi_state(state):
     return json.dumps(data)
 
 def pulihkan_state(state_data):
-    state = STATE_AWAL.copy()
+    state = copy.deepcopy(STATE_AWAL)
     if not state_data:
         return state
     state.update(json.loads(state_data))
@@ -113,7 +114,7 @@ def pulihkan_state(state_data):
 def muat_akun():
     user_id = session.get("user_id")
     g.user = None
-    g.user_state = STATE_AWAL.copy()
+    g.user_state = copy.deepcopy(STATE_AWAL)
     if user_id:
         with engine.connect() as koneksi:
             akun = koneksi.execute(
@@ -326,7 +327,7 @@ def daftar():
                             "nama": nama,
                             "email": email,
                             "sandi": sandi_hash,
-                            "state_data": serialisasi_state(STATE_AWAL),
+                            "state_data": serialisasi_state(copy.deepcopy(STATE_AWAL)),
                         },
                     )
             except IntegrityError:
@@ -375,31 +376,22 @@ FITUR = [
 @app.route("/beranda")
 @wajib_masuk
 def beranda():
-    try:
-        users = STATE.get("users") or STATE.get("pengguna") or STATE.get("akun") or {}
-        u = users.get(session.get("user_id")) or {}
-        if isinstance(u, str):
-            nama = u
-        else:
-            nama = u.get("nama") or u.get("name") or u.get("email") or session.get("user_nama") or session.get("nama") or "Teman"
-        cekin = STATE.get("cekin") or STATE.get("checkin") or {}
-        hari_ini = cekin.get(date.today().isoformat())
-        if hari_ini:
-            if isinstance(hari_ini, dict):
-                info = "Skor hari ini: " + str(hari_ini.get("skor", "-"))
-            else:
-                info = "Skor hari ini: " + str(hari_ini)
-        else:
-            info = "Belum cek-in hari ini."
-        try:
-            s = hitung_streak()
-        except Exception:
-            s = 0
-        html = "<h2>Halo, " + str(nama) + "</h2><p>" + datetime.now().strftime("%d %B %Y") + "</p><p>" + str(info) + "</p><p>Streak: " + str(s) + " hari | Total cek-in: " + str(len(cekin)) + "</p><p><a href='/cekin'>Cek-in Hari Ini</a> | <a href='/riwayat'>Riwayat</a> | <a href='/logout'>Keluar</a></p>"
-        return html
-    except Exception as e:
-        return "BERANDA ERROR: " + str(e), 200
-        
+    hari_ini = date.today()
+    aktif_list = aktif()
+    terdekat = sorted([t for t in aktif_list if t["deadline"]], key=lambda t: t["deadline"])[:3]
+    ada_mendesak = any(sisa_hari(t) is not None and sisa_hari(t) <= 1 for t in aktif_list)
+    hari = STATE["stres"].get(hari_ini)
+    pesan = pesan_stres(hari["skor"]) if hari else None
+    riwayat = sorted(STATE["stres"].items(), reverse=True)[:5]
+    mulai = [
+        ("Tulis tugas di Brain Dump", bool(STATE["tasks"])),
+        ("Pecah satu tugas jadi langkah kecil", any(t["langkah"] for t in STATE["tasks"])),
+        ("Isi cek stres hari ini", hari_ini in STATE["stres"]),
+        ("Coba Ruang Tenang", bool(STATE["jurnal"])),
+    ]
+    return render_template("beranda.html", ada_mendesak=ada_mendesak, ada_tugas=bool(STATE["tasks"]),
+        pesan=pesan, riwayat=riwayat, fokus=fokus_tiga(), mulai=mulai, terdekat=terdekat)
+
 @app.route("/cek-stres", methods=["POST"])
 @wajib_masuk
 def cek_stres():
@@ -439,8 +431,9 @@ def atur_tenggat():
     return render_template("atur_tenggat.html", baris=baris, default=(date.today() + timedelta(days=3)).isoformat())
 
 @app.route("/kalender/<int:id>")
+@wajib_masuk
 def kalender(id):
-    t = next((x for x in STATE["tugas"] if x["id"] == id), None)
+    t = cari_tugas(id)
     if not t or not t["deadline"]:
         return "Tugas tidak ditemukan", 404
     d = t["deadline"].strftime("%Y%m%d")
@@ -450,11 +443,11 @@ BEGIN:VEVENT
 DTSTART:{d}T090000
 DTEND:{d}T100000
 SUMMARY:Tenggat: {t['judul']}
-DESCRIPTION:{t['catatan']} - dari web Teman Tugas
+DESCRIPTION:{t.get('matkul', '')} - dari web TenangTugas
 END:VEVENT
 END:VCALENDAR"""
     from flask import Response
-    return Response(ics, mimetype="text/calendar", headers={"Content-Disposition": f"attachment; filename=tugas-{t['judul']}.ics"})
+    return Response(ics, mimetype="text/calendar", headers={"Content-Disposition": f"attachment; filename=tugas-{id}.ics"})
 
 @app.route("/tugas")
 @wajib_masuk
@@ -697,7 +690,7 @@ PAGES["beranda.html"] = """{% extends 'base.html' %}{% block content %} {% if ad
 <div><div class="card yel"><h2>Mulai di sini</h2>{% for teks, ok in mulai %}<p style="margin:6px 0">{{ '✅' if ok else '⭕' }} {{ teks }}</p>{% endfor %}</div>
 <div class="card"><h2>Tenggat terdekat</h2>{% for t in terdekat %}<p style="margin:6px 0"><b>{{ t.judul }}</b><br><span class="meta">{{ fmt_tgl(t.deadline) }}</span></p>
 {% else %}<p class="meta">Belum ada tenggat. Tambahkan saat kamu mengatur tugas.</p>{% endfor %}</div>
-<div class="card blue"><h2 style="color:var(--navy)">Ruang Tenang</h2><p>Latihan napas 4-7-8 atau napas kotak selama 1 sampai 3 menit, kapan pun kamu butuh jeda. <a class="btn" href="{{ url_for('kalender', id=t.id) }}">📅 Simpan ke Kalender HP</a></p>
+<div class="card blue"><h2 style="color:var(--navy)">Ruang Tenang</h2><p>Latihan napas 4-7-8 atau napas kotak selama 1 sampai 3 menit, kapan pun kamu butuh jeda.</p>
 <a class="btn o" href="{{ url_for('ruang_tenang') }}" style="color:var(--navy);border-color:var(--navy)">Coba napas 1 menit</a></div></div></div>
 <h2 style="font-size:22px">Semua fitur TenangTugas</h2><p class="sub">Buka fitur mana pun kapan saja. Tidak perlu berurutan.</p>
 <div class="grid3">{% for judul, desk, ep, warna in FITUR %}<a class="fitur {{ warna }}" href="{{ url_for(ep) }}"><h3>{{ judul }}</h3><p>{{ desk }}</p></a>{% endfor %}</div>{% endblock %}"""
@@ -821,42 +814,5 @@ PAGES["darurat.html"] = """{% extends 'base.html' %}{% block content %}<h1>Mode 
 
 app.jinja_loader = DictLoader(PAGES)
 
-@app.route("/admin")
-def admin():
-    import sqlite3, os, glob
-    paths = ["/tmp/tenangtugas.db", "tenangtugas.db", "instance/tenangtugas.db"] + glob.glob("/tmp/*.db") + glob.glob("*.db") + glob.glob("instance/*.db")
-    html = "<h1>Data Database TenangTugas</h1>"
-    for p in paths:
-        if not os.path.exists(p):
-            continue
-        html += f"<h2>File: {p}</h2>"
-        try:
-            con = sqlite3.connect(p)
-            con.row_factory = sqlite3.Row
-            cur = con.cursor()
-            tables = cur.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
-            for t in tables:
-                tname = t[0]
-                html += f"<h3>Tabel: {tname}</h3>"
-                rows = cur.execute(f"SELECT * FROM {tname}").fetchall()
-                if not rows:
-                    html += "<p>(kosong)</p>"
-                    continue
-                cols = rows[0].keys()
-                html += "<table border='1' cellpadding='8'><tr>"
-                for c in cols:
-                    html += f"<th>{c}</th>"
-                html += "</tr>"
-                for r in rows:
-                    html += "<tr>"
-                    for c in cols:
-                        html += f"<td>{r[c]}</td>"
-                    html += "</tr>"
-                html += "</table>"
-            con.close()
-        except Exception as e:
-            html += f"<p>Error baca {p}: {e}</p>"
-    html += "<br><a href='/'>Balik ke Home</a>"
-    return html
 if __name__ == "__main__":
     app.run(debug=os.environ.get("FLASK_DEBUG") == "1")
