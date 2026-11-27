@@ -648,7 +648,7 @@ PAGES["daftar.html"] = """{% extends 'base.html' %}{% block body %}<div class="a
 <div class="tabs"><a class="{{ 'on' if tab=='daftar' }}" href="{{ url_for('daftar') }}">Daftar</a><a class="{{ 'on' if tab=='masuk' }}" href="{{ url_for('daftar', tab='masuk') }}">Masuk</a></div>
 {% for m in get_flashed_messages() %}<div class="flash">{{ m }}</div>{% endfor %}
 {% if tab=='masuk' %}<h1>Masuk</h1><form method="post"><input type="hidden" name="aksi" value="masuk">
-<label>Email</label><input name="email" type="email" placeholder="nama@email.com"><label>Kata sandi</label><div style="display:flex;gap:6px"><input name="sandi" type="password" id="sandi_masuk" style="flex:1"><button type="button" class="btn o" style="padding:12px 14px;width:auto;margin:4px 0 12px" onclick="let i=document.getElementById('sandi_masuk');i.type=i.type=='password'?'text':'password'"></button></div>
+<label>Email</label><input name="email" type="email" placeholder="nama@email.com"><label>Kata sandi</label><div style="display:flex;gap:6px"><input name="sandi" type="password" id="sandi_masuk" style="flex:1"><button type="button" class="btn o" style="padding:12px 14px;width:auto;margin:4px 0 12px" onclick="let i=document.getElementById('sandi_masuk');i.type=i.type=='password'?'text':'password'">👀</button></div>
 <button class="btn full">Masuk</button></form>
 {% else %}<h1>Buat akunmu</h1><p class="sub">Hanya butuh satu menit. Setelah itu kami kenalkan cara memakai TenangTugas.</p>
 <form method="post"><input type="hidden" name="aksi" value="daftar"><label>Nama panggilan</label><input name="nama">
