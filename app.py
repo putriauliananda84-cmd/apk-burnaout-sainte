@@ -669,7 +669,7 @@ PAGES["panduan.html"] = """{% extends 'base.html' %}{% block body %}<div class="
 <a class="btn" href="{{ url_for('beranda') }}">Mengerti, ke Beranda</a>
 <p class="meta">Web ini bukan pengganti layanan kesehatan mental. Jika stres terasa berat atau terus-menerus, hubungi konseling kampus atau layanan kesehatan setempat.</p></div>{% endblock %}"""
 
-PAGES["beranda.html"] = """{% extends 'base.html' %}{% block content %}<h1>Halo, {{ user.nama }}</h1>
+PAGES["beranda.html"] = """{% extends 'base.html' %}{% block content %} {% if ada_mendesak %}<div class="card" style="background:#ffe0e0;border:2px solid red"><h2>⚠️ Pengingat! Ada tugas yang tenggatnya besok!</h2><p>Buruan cek, jangan sampe kelewat. Pecah jadi langkah kecil dulu biar nggak panik.</p><a class="btn" href="{{ url_for('tugas') }}">Lihat Tugas Mendesak</a></div>{% endif %}<h1>Halo, {{ user.nama }}</h1>
 <p class="sub">Ini Beranda-mu. Mulai dari yang paling kecil, satu langkah saja sudah cukup.</p>
 <div class="grid2"><div>
 {% if not ada_tugas %}<div class="card hero"><h2>Belum ada tugas. Mulai dari Brain Dump.</h2><p>Tuliskan semua tugasmu tanpa harus langsung mengatur. Nanti kita susun dan pecah bersama.</p>
