@@ -686,7 +686,7 @@ PAGES["beranda.html"] = """{% extends 'base.html' %}{% block content %} {% if ad
 <div><div class="card yel"><h2>Mulai di sini</h2>{% for teks, ok in mulai %}<p style="margin:6px 0">{{ '✅' if ok else '⭕' }} {{ teks }}</p>{% endfor %}</div>
 <div class="card"><h2>Tenggat terdekat</h2>{% for t in terdekat %}<p style="margin:6px 0"><b>{{ t.judul }}</b><br><span class="meta">{{ fmt_tgl(t.deadline) }}</span></p>
 {% else %}<p class="meta">Belum ada tenggat. Tambahkan saat kamu mengatur tugas.</p>{% endfor %}</div>
-<div class="card blue"><h2 style="color:var(--navy)">Ruang Tenang</h2><p>Latihan napas 4-7-8 atau napas kotak selama 1 sampai 3 menit, kapan pun kamu butuh jeda.</p>
+<div class="card blue"><h2 style="color:var(--navy)">Ruang Tenang</h2><p>Latihan napas 4-7-8 atau napas kotak selama 1 sampai 3 menit, kapan pun kamu butuh jeda. <a class="btn" href="{{ url_for('kalender', id=t.id) }}">📅 Simpan ke Kalender HP</a></p>
 <a class="btn o" href="{{ url_for('ruang_tenang') }}" style="color:var(--navy);border-color:var(--navy)">Coba napas 1 menit</a></div></div></div>
 <h2 style="font-size:22px">Semua fitur TenangTugas</h2><p class="sub">Buka fitur mana pun kapan saja. Tidak perlu berurutan.</p>
 <div class="grid3">{% for judul, desk, ep, warna in FITUR %}<a class="fitur {{ warna }}" href="{{ url_for(ep) }}"><h3>{{ judul }}</h3><p>{{ desk }}</p></a>{% endfor %}</div>{% endblock %}"""
