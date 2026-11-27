@@ -657,7 +657,7 @@ PAGES["beranda.html"] = """{% extends 'base.html' %}{% block content %}<h1>Halo,
 {% if not ada_tugas %}<div class="card hero"><h2>Belum ada tugas. Mulai dari Brain Dump.</h2><p>Tuliskan semua tugasmu tanpa harus langsung mengatur. Nanti kita susun dan pecah bersama.</p>
 <a class="btn y" href="{{ url_for('braindump') }}">Tulis tugas pertamaku</a></div>{% endif %}
 <div class="card"><h2>Bagaimana perasaanmu hari ini?</h2><form method="post" action="{{ url_for('cek_stres') }}"><div class="moods">
-{% for m in MOODS %}<label><input type="radio" name="mood" value="{{ m }}" required {{ 'checked' if hari_ini and hari_ini.skor==loop.index }}><span><b>{{ MOOD_EMOJI[loop.index0] }}</b>{{ m }}</span></label>{% endfor %}</div>
+{% for m in MOODS %}<label><input type="radio" name="mood" value="{{ m }}" required ><span><b>{{ MOOD_EMOJI[loop.index0] }}</b>{{ m }}</span></label>{% endfor %}</div>
 {% if pesan %}<p><span class="pill">{{ pesan }}</span></p>{% endif %}
 <label>Apa yang paling membuatmu cemas hari ini?</label><input name="catatan" placeholder="Boleh singkat, boleh dikosongkan">
 <button class="btn">Simpan</button></form>
