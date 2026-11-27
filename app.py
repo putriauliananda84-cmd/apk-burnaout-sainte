@@ -384,8 +384,9 @@ def beranda():
         ("Coba satu sesi fokus 25 menit", STATE["fokus_menit"] > 0),
     ]
     terdekat = sorted([t for t in aktif() if t["deadline"]], key=lambda t: t["deadline"])[:3]
+     ada_mendesak = any(t["deadline"] and (t["deadline"] - date.today()).days == 1 for t in aktif())
     riwayat = sorted(STATE["stres"].items(), key=lambda x: x[0], reverse=True)[:7]
-    return render_template("beranda.html", ada_tugas=bool(tugas), fokus=fokus_tiga(), mulai=mulai,
+    return render_template("beranda.html", ada_tugas=bool(tugas), ada_mendesak=ada_mendesak, fokus=fokus_tiga(), mulai=mulai,
                            terdekat=terdekat, hari_ini=hari_ini, FITUR=FITUR, riwayat=riwayat,
                            pesan=pesan_stres(hari_ini["skor"]) if hari_ini else None)
 
