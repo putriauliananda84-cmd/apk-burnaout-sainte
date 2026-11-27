@@ -427,6 +427,24 @@ def atur_tenggat():
         return redirect(url_for("braindump"))
     return render_template("atur_tenggat.html", baris=baris, default=(date.today() + timedelta(days=3)).isoformat())
 
+@app.route("/kalender/<id>")
+def kalender(id):
+    t = next((x for x in STATE["tugas"] if x["id"] == id), None)
+    if not t or not t["deadline"]:
+        return "Tugas tidak ditemukan", 404
+    d = t["deadline"].strftime("%Y%m%d")
+    ics = f"""BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+DTSTART:{d}T090000
+DTEND:{d}T100000
+SUMMARY:Tenggat: {t['judul']}
+DESCRIPTION:{t['catatan']} - dari web Teman Tugas
+END:VEVENT
+END:VCALENDAR"""
+    from flask import Response
+    return Response(ics, mimetype="text/calendar", headers={"Content-Disposition": f"attachment; filename=tugas-{t['judul']}.ics"})
+
 @app.route("/tugas")
 @wajib_masuk
 def tugas():
