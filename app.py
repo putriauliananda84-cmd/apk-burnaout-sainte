@@ -395,14 +395,8 @@ def beranda():
             s = hitung_streak()
         except Exception:
             s = 0
-        return render_template(
-            "beranda.html",
-            nama=nama,
-            tanggal=datetime.now().strftime("%d %B %Y"),
-            info=info,
-            streak=s,
-            total_cekin=len(cekin),
-        )
+        html = "<h2>Halo, " + str(nama) + "</h2><p>" + datetime.now().strftime("%d %B %Y") + "</p><p>" + str(info) + "</p><p>Streak: " + str(s) + " hari | Total cek-in: " + str(len(cekin)) + "</p><p><a href='/cekin'>Cek-in Hari Ini</a> | <a href='/riwayat'>Riwayat</a> | <a href='/logout'>Keluar</a></p>"
+        return html
     except Exception as e:
         return "BERANDA ERROR: " + str(e), 200
         
