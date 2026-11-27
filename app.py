@@ -375,20 +375,7 @@ FITUR = [
 @app.route("/beranda")
 @wajib_masuk
 def beranda():
-    tugas = STATE["tasks"]
-    hari_ini = STATE["stres"].get(date.today())
-    mulai = [
-        ("Tulis semua tugas di Brain Dump", bool(tugas)),
-        ("Pecah satu tugas jadi langkah kecil", any(t["langkah"] for t in tugas)),
-        ("Isi cek stres hari ini", hari_ini is not None),
-        ("Coba satu sesi fokus 25 menit", STATE["fokus_menit"] > 0),
-    ]
-    terdekat = sorted([t for t in aktif() if t["deadline"]], key=lambda t: str(t["deadline"]))
-    ada_mendesak = False
-    riwayat = sorted(STATE["stres"].items(), key=lambda x: x[0], reverse=True)[:7]
-    return render_template("beranda.html", ada_tugas=bool(tugas), ada_mendesak=ada_mendesak, fokus=fokus_tiga(), mulai=mulai,
-                           terdekat=terdekat, hari_ini=hari_ini, FITUR=FITUR, riwayat=riwayat,
-                           pesan=pesan_stres(hari_ini["skor"]) if hari_ini else None)
+    return render_template("beranda.html", nama="Teman", pesan_stres="", fokus_tiga=[], terdekat=[], ada_mendesak=False, sekarang=None, mulai=[], riwayat=[], hari_ini=None, pesan=None)
 
 @app.route("/cek-stres", methods=["POST"])
 @wajib_masuk
