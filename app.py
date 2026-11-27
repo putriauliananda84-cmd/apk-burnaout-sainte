@@ -376,20 +376,32 @@ FITUR = [
 @wajib_masuk
 def beranda():
     try:
-        u = STATE["users"].get(session["user_id"]) or {}
-        nama = u.get("nama") or u.get("name") or u.get("email") or "Teman"
-        hari_ini = STATE["cekin"].get(date.today().isoformat())
+        users = STATE.get("users") or STATE.get("pengguna") or STATE.get("akun") or {}
+        u = users.get(session.get("user_id")) or {}
+        if isinstance(u, str):
+            nama = u
+        else:
+            nama = u.get("nama") or u.get("name") or u.get("email") or session.get("user_nama") or session.get("nama") or "Teman"
+        cekin = STATE.get("cekin") or STATE.get("checkin") or {}
+        hari_ini = cekin.get(date.today().isoformat())
         if hari_ini:
-            info = "Skor hari ini: " + str(hari_ini.get("skor", "-"))
+            if isinstance(hari_ini, dict):
+                info = "Skor hari ini: " + str(hari_ini.get("skor", "-"))
+            else:
+                info = "Skor hari ini: " + str(hari_ini)
         else:
             info = "Belum cek-in hari ini."
+        try:
+            s = hitung_streak()
+        except Exception:
+            s = 0
         return render_template(
             "beranda.html",
             nama=nama,
             tanggal=datetime.now().strftime("%d %B %Y"),
             info=info,
-            streak=hitung_streak(),
-            total_cekin=len(STATE["cekin"]),
+            streak=s,
+            total_cekin=len(cekin),
         )
     except Exception as e:
         return "BERANDA ERROR: " + str(e), 200
