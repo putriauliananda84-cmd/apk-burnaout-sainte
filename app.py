@@ -668,6 +668,16 @@ transition:transform 4s ease-in-out;box-shadow:0 0 0 20px #bdd3e3,0 0 0 40px #dd
 .catatan{margin-top:auto;background:#fff;border-radius:20px;padding:22px;font-size:13px;color:var(--gray)}
 .top{display:flex;justify-content:space-between;align-items:center;padding:16px 52px;border-bottom:1px solid var(--line)}
 .wrap{padding:36px 52px;max-width:1150px}
+.profil{background:#fff;border:1px solid var(--line);border-radius:28px;overflow:hidden;margin:16px 0 26px;box-shadow:0 12px 32px rgba(47,93,74,.12)}
+.profil .sampul{height:120px;padding:20px 28px;color:#fff;font-weight:700;background:radial-gradient(circle at 85% 20%,rgba(247,222,140,.75),transparent 32%),radial-gradient(circle at 65% 120%,rgba(221,233,243,.6),transparent 40%),linear-gradient(120deg,#2f5d4a,#6f9b80)}
+.profil .isi{display:flex;align-items:flex-start;gap:18px;padding:0 28px 18px;flex-wrap:wrap}
+.profil .avatar{width:96px;height:96px;margin-top:-44px;border-radius:50%;border:5px solid #fff;background:linear-gradient(145deg,#f7de8c,#e2ece2);color:var(--g);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:800;box-shadow:0 6px 16px rgba(31,45,38,.18);flex-shrink:0;position:relative}
+.profil .identitas{flex:1;min-width:180px;padding-top:12px}.profil .identitas h2{font-size:26px;margin:0;text-transform:capitalize;overflow-wrap:anywhere}
+.profil .identitas p{margin:4px 0 0;color:var(--gray);font-size:14px;overflow-wrap:anywhere}
+.profil .keluar{margin-top:18px;padding:10px 20px;border-radius:99px;background:#fff0f0;border:1px solid #f3caca;color:#8b1e1e;font-weight:700;font-size:14px;text-decoration:none}.profil .keluar:hover{background:#ffe0e0}
+.profil .kutipan{margin:0 28px 14px;padding:13px 18px;border-radius:16px;background:var(--lg);color:var(--g);font-size:14px;font-weight:600}
+.profil .idakun{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 28px 22px;padding-top:14px;border-top:1px dashed var(--line);font-size:12px;color:var(--gray)}
+.profil .idakun code{overflow-wrap:anywhere;min-width:0}.profil .idakun button{border:1px solid var(--line);background:var(--cream);color:var(--g);border-radius:99px;padding:5px 14px;font-weight:700;cursor:pointer}
 @media(max-width:850px){.app{flex-direction:column}aside{width:100%;height:auto;position:static}.grid2,.grid3,.grid4,.auth{grid-template-columns:1fr}}
 """
 
@@ -884,7 +894,13 @@ const g=ctx.createGain();g.gain.value=0.25;sumber.connect(lp);lp.connect(g);g.co
 </script>{% endblock %}"""
 
 PAGES["profil.html"] = """{% extends 'base.html' %}{% block content %}<h1>Profil & Refleksi</h1>
-<div class="card"><div class="row"><div><h2 style="margin:0">Akun Saya</h2><p style="margin:6px 0"><b>{{ user.nama }}</b><br><span class="meta">{{ user.email }}</span><br><span class="meta">ID Akun: {{ user.id }}</span></p></div><div style="width:52px;height:52px;border-radius:50%;background:var(--g);color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;flex-shrink:0">{{ user.nama[0]|upper }}</div></div><a class="btn o" href="{{ url_for('keluar') }}">Logout</a></div>
+<div class="profil"><div class="sampul"><span>🍃 Akun Saya</span></div>
+<div class="isi"><div class="avatar" aria-hidden="true">{{ user.nama[0]|upper }}</div>
+<div class="identitas"><h2>{{ user.nama }}</h2><p>✉️ {{ user.email }}</p></div>
+<a class="keluar" href="{{ url_for('keluar') }}">Logout →</a></div>
+<div class="kutipan">🌱 Pelan-pelan saja, satu langkah kecil tetap berarti.</div>
+<div class="idakun"><span>ID Akun</span><code id="id_akun">{{ user.id }}</code>
+<button type="button" onclick="const t=this;navigator.clipboard.writeText(document.getElementById('id_akun').textContent).then(()=>{t.textContent='✓ Tersalin'},()=>{t.textContent='Gagal menyalin'})">Salin</button></div></div>
 <p class="sub">Lihat pola stresmu minggu ini.{% if contoh %} Angka di bawah adalah contoh data sampai kamu mengisi cek stres harian.{% endif %}</p>
 <div class="grid2"><div class="card"><h2>Riwayat stres mingguan</h2><div class="bar">{% set mx = data|map(attribute=1)|max %}
 {% for h, s in data %}<div class="{{ 'max' if s==mx and s>0 }}" style="height:{{ s*20 }}%"></div>{% endfor %}</div>
