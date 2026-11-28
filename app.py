@@ -678,6 +678,27 @@ transition:transform 4s ease-in-out;box-shadow:0 0 0 20px #bdd3e3,0 0 0 40px #dd
 .profil .kutipan{margin:0 28px 14px;padding:13px 18px;border-radius:16px;background:var(--lg);color:var(--g);font-size:14px;font-weight:600}
 .profil .idakun{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 28px 22px;padding-top:14px;border-top:1px dashed var(--line);font-size:12px;color:var(--gray)}
 .profil .idakun code{overflow-wrap:anywhere;min-width:0}.profil .idakun button{border:1px solid var(--line);background:var(--cream);color:var(--g);border-radius:99px;padding:5px 14px;font-weight:700;cursor:pointer}
+/* Animasi tombol */
+.btn,.kecil,.tabs a,aside a.m{transition:transform .2s ease,box-shadow .2s ease,filter .2s ease,background-color .2s ease}
+.btn:hover,.kecil:hover,.tabs a:hover{transform:translateY(-2px);box-shadow:0 8px 18px rgba(31,45,38,.18);filter:brightness(1.05)}
+.btn:active,.kecil:active,.tabs a:active{transform:scale(.96);box-shadow:none}
+aside a.m:hover{background:#fff;transform:translateX(5px)}
+.btn{position:relative;overflow:hidden}
+.btn::after{content:"";position:absolute;top:0;bottom:0;left:-60%;width:40%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.4),transparent);transform:skewX(-20deg);pointer-events:none}
+.btn:hover::after{left:130%;transition:left .6s ease}
+.btn:focus-visible,.kecil:focus-visible,.tabs a:focus-visible,.fitur:focus-visible,aside a.m:focus-visible{outline:3px solid #dfa93d;outline-offset:2px}
+/* Hover kartu */
+.card,.fitur,.profil{transition:transform .25s ease,box-shadow .25s ease}
+.card:hover,.profil:hover{transform:translateY(-3px);box-shadow:0 14px 28px rgba(47,93,74,.13)}
+.fitur:hover,.fitur:focus-visible{transform:translateY(-6px);box-shadow:0 16px 28px rgba(47,93,74,.18)}
+/* Skeleton shimmer saat pemutar Spotify dimuat */
+.skeleton{position:relative;height:152px;margin-top:8px;border-radius:16px;overflow:hidden}
+.skeleton .spotify-embed{margin:0;display:block}
+.skeleton.memuat{background:var(--lg)}
+.skeleton.memuat iframe{opacity:0}
+.skeleton.memuat::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.8) 50%,transparent 70%);transform:translateX(-100%);animation:shimmer 1.4s infinite}
+@keyframes shimmer{to{transform:translateX(100%)}}
+@media(prefers-reduced-motion:reduce){.btn,.kecil,.tabs a,aside a.m,.card,.fitur,.profil{transition:none}.btn:hover,.kecil:hover,.tabs a:hover,aside a.m:hover,.card:hover,.fitur:hover,.profil:hover{transform:none}.btn::after{display:none}.skeleton.memuat::after{animation:none;display:none}}
 @media(max-width:850px){.app{flex-direction:column}aside{width:100%;height:auto;position:static}.grid2,.grid3,.grid4,.auth{grid-template-columns:1fr}}
 """
 
@@ -880,7 +901,8 @@ PAGES["ruang_tenang.html"] = """{% extends 'base.html' %}{% block content %}<h1>
 <form method="post" class="card"><h2>Jurnal cepat</h2><label>Apa satu hal kecil yang sudah kamu selesaikan?</label><textarea name="jurnal"></textarea><button class="btn">Simpan</button>
 {% for j in jurnal %}<p class="meta">{{ fmt_tgl(j.tgl) }}: {{ j.teks }}</p>{% endfor %}</form>
 <div class="card"><h2>Musik untuk tenang</h2>
-<iframe class="spotify-embed" src="https://open.spotify.com/embed/playlist/{{ spotify_playlist_id }}?utm_source=generator&theme=0" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy" title="Playlist Spotify Ruang Tenang"></iframe>
+<div class="skeleton memuat" id="skel_spotify"><iframe class="spotify-embed" onload="this.parentNode.classList.remove('memuat')" src="https://open.spotify.com/embed/playlist/{{ spotify_playlist_id }}?utm_source=generator&theme=0" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy" title="Playlist Spotify Ruang Tenang"></iframe></div>
+<script>setTimeout(()=>document.getElementById('skel_spotify').classList.remove('memuat'),8000)</script>
 <a class="btn o" href="https://open.spotify.com/playlist/{{ spotify_playlist_id }}" target="_blank" rel="noopener">Buka di Spotify</a>
 <div class="tabs" style="margin-top:14px"><a href="#" onclick="suara('Hujan',1800,0.5);return false">Suara hujan</a><a href="#" onclick="suara('White noise',20000,0);return false">White noise</a></div>
 <p class="meta" id="info">Pilih musik Spotify atau suara latar dari browser.</p></div></div>
