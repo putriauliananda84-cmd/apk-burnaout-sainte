@@ -673,7 +673,7 @@ transition:transform 4s ease-in-out;box-shadow:0 0 0 20px #bdd3e3,0 0 0 40px #dd
 
 PAGES = {}
 
-# Bunyi pengingat dibuat langsung di browser (tanpa file audio)
+# Suara pengingat: memutar static/pengingat.mp3; kalau file tidak ada, bunyi "ting-ting"
 SUARA_JS = """
 <script>
 (function(){
@@ -681,8 +681,16 @@ const AC=window.AudioContext||window.webkitAudioContext;
 const info=document.getElementById('info_suara');
 if(!AC){info.textContent='Browser ini tidak mendukung suara.';return}
 const ctx=new AC();let nada=[],sudah=false,dimatikan=false;
-function bunyi(){
+// File suara sendiri (kalau ada)
+const suaraSendiri=fetch('/static/pengingat.mp3')
+  .then(r=>r.ok?r.arrayBuffer():Promise.reject())
+  .then(a=>ctx.decodeAudioData(a)).catch(()=>null);
+let urutan=0;
+async function bunyi(){
   hentikan();sudah=true;info.textContent='';
+  const ini=urutan,buf=await suaraSendiri;
+  if(ini!==urutan)return; // dimatikan atau diputar ulang saat file dimuat
+  if(buf){const o=ctx.createBufferSource();o.buffer=buf;o.connect(ctx.destination);o.start();nada.push(o);return}
   // 3 kali "ting-ting"
   for(let i=0;i<3;i++){[880,1175].forEach((f,j)=>{
     const o=ctx.createOscillator(),v=ctx.createGain(),t=ctx.currentTime+i*0.9+j*0.22;
@@ -690,7 +698,7 @@ function bunyi(){
     v.gain.exponentialRampToValueAtTime(0.4,t+0.02);v.gain.exponentialRampToValueAtTime(0.0001,t+0.2);
     o.connect(v);v.connect(ctx.destination);o.start(t);o.stop(t+0.22);nada.push(o)})}
 }
-function hentikan(){nada.forEach(o=>{try{o.stop()}catch(e){}});nada=[]}
+function hentikan(){urutan++;nada.forEach(o=>{try{o.stop()}catch(e){}});nada=[]}
 function otomatis(){if(!sudah&&!dimatikan&&ctx.state==='running')bunyi()}
 document.getElementById('putar_suara').onclick=()=>{dimatikan=false;ctx.resume().then(bunyi)};
 document.getElementById('stop_suara').onclick=()=>{dimatikan=true;hentikan();info.textContent='Suara dimatikan.'};
@@ -700,7 +708,7 @@ ctx.onstatechange=otomatis;otomatis();
 function pertama(e){if(e.target.closest&&e.target.closest('#stop_suara,#putar_suara,a'))return;
   if(!sudah&&!dimatikan)ctx.resume().then(otomatis)}
 document.addEventListener('click',pertama);document.addEventListener('keydown',pertama);
-setTimeout(()=>{if(!sudah&&!dimatikan)info.textContent='Browser menahan suara otomatis. Klik di mana saja pada halaman untuk membunyikan pengingat.mp3'},600);
+setTimeout(()=>{if(!sudah&&!dimatikan)info.textContent='Browser menahan suara otomatis. Klik di mana saja pada halaman untuk membunyikan pengingat.'},600);
 })();
 </script>"""
 
