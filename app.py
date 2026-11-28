@@ -837,6 +837,42 @@ document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLower
 """
 CSS += UI_CSS
 
+CSS += """
+/* Animasi halaman masuk: dari kusut menjadi terurai */
+.masuk-hidup .kiri{position:relative;overflow:hidden;isolation:isolate;background:linear-gradient(135deg,#e2ece2,#f3f1df,#dde9f3,#e2ece2);background-size:300% 300%;animation:langit 16s ease infinite}
+@keyframes langit{50%{background-position:100% 100%}}
+.masuk-hidup .kiri::before,.masuk-hidup .kiri::after{content:"";position:absolute;z-index:-1;border-radius:50%;filter:blur(2px);animation:gumpal 11s ease-in-out infinite alternate}
+.masuk-hidup .kiri::before{width:280px;height:280px;right:-90px;top:-70px;background:rgba(247,222,140,.45)}
+.masuk-hidup .kiri::after{width:220px;height:220px;left:-80px;bottom:60px;background:rgba(111,155,128,.22);animation-delay:-5s}
+@keyframes gumpal{to{transform:translate(-30px,40px) scale(1.15)}}
+.kata{display:inline-block;animation:kata .7s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(var(--n)*.14s)}
+@keyframes kata{from{opacity:0;transform:translateY(28px) rotate(5deg);filter:blur(5px)}}
+.kata em{position:relative;display:inline-block;font-style:normal;color:var(--g)}
+.kata em svg{position:absolute;left:0;bottom:-8px;width:100%;height:16px;overflow:visible}
+.kata em path{fill:none;stroke:#dfa93d;stroke-width:5;stroke-linecap:round;stroke-dasharray:1;animation:gores 1.1s ease 1.2s both}
+@keyframes gores{from{stroke-dashoffset:1;opacity:0}5%{opacity:1}to{stroke-dashoffset:0}}
+.urai{width:100%;max-width:440px;margin:6px 0 28px}
+.benang{display:block;width:100%;height:auto;margin-bottom:14px;overflow:visible}.benang path{fill:none;stroke:var(--g);stroke-width:2.5;stroke-linecap:round;stroke-dasharray:1}
+.benang .kusut{animation:kusut 10s ease-in-out infinite}.benang .lurus{stroke:#dfa93d;stroke-width:4;animation:lurus 10s ease-in-out infinite}
+@keyframes kusut{0%{stroke-dashoffset:1}28%,86%{stroke-dashoffset:0;opacity:1}96%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes lurus{0%,28%{stroke-dashoffset:1;opacity:0}30%{opacity:1}55%,86%{stroke-dashoffset:0;opacity:1}96%,100%{stroke-dashoffset:0;opacity:0}}
+.kertas{display:flex;align-items:center;gap:12px;margin-bottom:10px;padding:11px 16px;border-radius:16px;background:rgba(255,255,255,.94);box-shadow:0 8px 20px rgba(47,93,74,.13);animation:rapi 10s cubic-bezier(.6,0,.2,1) infinite}
+.kertas strong{display:block;font-size:14px}.kertas small{color:var(--gray)}
+.kertas i{display:flex;align-items:center;justify-content:center;width:24px;height:24px;flex-shrink:0;border:2px solid var(--g);border-radius:50%;font-style:normal}
+.kertas i b{display:flex;align-items:center;justify-content:center;width:100%;height:100%;border-radius:50%;background:var(--g);color:#fff;font-size:13px}
+.k1{--x:34px;--y:12px;--p:-7deg}.k2{--x:-18px;--y:-3px;--p:6deg}.k3{--x:52px;--y:-10px;--p:-4deg}
+@keyframes rapi{0%,18%{transform:translate(var(--x),var(--y)) rotate(var(--p))}38%,86%{transform:none}100%{transform:translate(var(--x),var(--y)) rotate(var(--p))}}
+.k1 i b{animation:centang1 10s ease infinite}.k2 i b{animation:centang2 10s ease infinite}.k3 i b{animation:centang3 10s ease infinite}
+@keyframes centang1{0%,44%{transform:scale(0)}48%{transform:scale(1.3)}51%,86%{transform:scale(1)}94%,100%{transform:scale(0)}}
+@keyframes centang2{0%,54%{transform:scale(0)}58%{transform:scale(1.3)}61%,86%{transform:scale(1)}94%,100%{transform:scale(0)}}
+@keyframes centang3{0%,64%{transform:scale(0)}68%{transform:scale(1.3)}71%,86%{transform:scale(1)}94%,100%{transform:scale(0)}}
+.masuk-hidup ul li{animation:geser .6s ease both}.masuk-hidup ul li:nth-child(1){animation-delay:.8s}.masuk-hidup ul li:nth-child(2){animation-delay:1s}.masuk-hidup ul li:nth-child(3){animation-delay:1.2s}
+@keyframes geser{from{opacity:0;transform:translateX(-22px)}}
+.masuk-hidup .kanan>div{animation:naik-form .8s ease .25s both}@keyframes naik-form{from{opacity:0;transform:translateY(24px)}}
+@media(prefers-reduced-motion:reduce){.masuk-hidup *,.masuk-hidup *::before,.masuk-hidup *::after{animation:none!important}.masuk-hidup .kiri{animation:none}}
+@media(max-width:850px){.masuk-hidup .kiri{padding:28px 22px}.masuk-hidup h1.big{font-size:34px;margin-top:20px}.k1{--x:12px}.k2{--x:-8px}.k3{--x:16px}}
+"""
+
 PAGES = {}
 
 # Suara pengingat: memutar static/pengingat.mp3; kalau file tidak ada, bunyi "ting-ting"
@@ -888,10 +924,14 @@ PAGES["base.html"] = """<!doctype html><html lang="id"><head><meta charset="utf-
 <a class="kecil" href="{{ url_for('keluar') }}" style="background:#ffe0e0;color:#8b1e1e;font-weight:700">Logout</a></div></aside>
 <main>{% for m in get_flashed_messages() %}<div class="flash">{{ m }}</div>{% endfor %}{% block content %}{% endblock %}</main></div>{% endblock %}</body></html>"""
 
-PAGES["daftar.html"] = """{% extends 'base.html' %}{% block body %}<div class="auth"><div class="kiri"><div class="logo">TenangTugas</div>
-<h1 class="big">Tugas banyak? Mari kita urai pelan-pelan.</h1>
+PAGES["daftar.html"] = """{% extends 'base.html' %}{% block body %}<div class="auth masuk-hidup"><div class="kiri"><div class="logo">TenangTugas</div>
+<h1 class="big" aria-label="Tugas banyak? Mari kita urai pelan-pelan.">{% for k in ['Tugas','banyak?','Mari','kita','urai'] %}<span class="kata" aria-hidden="true" style="--n:{{ loop.index0 }}">{{ k }}</span> {% endfor %}<span class="kata" aria-hidden="true" style="--n:5"><em>pelan-pelan.<svg viewBox="0 0 300 18" preserveAspectRatio="none"><path pathLength="1" d="M4 12 C60 2 110 17 165 9 S255 5 296 10"/></svg></em></span></h1>
 <p class="sub">TenangTugas membantu mahasiswa mengelola tugas yang menumpuk sekaligus menurunkan stres akademik.</p>
 <ul><li>🟢 Memecah tugas jadi langkah kecil</li><li>🔵 Menentukan prioritas dengan tenang</li><li>🟡 Ada jeda relaksasi untuk menenangkan diri</li></ul>
+<div class="urai" aria-hidden="true">
+<svg class="benang" viewBox="0 0 440 70"><path class="kusut" pathLength="1" d="M8 38 C60 -8 112 78 82 50 C45 12 150 2 128 46 C108 82 72 14 160 20 C240 26 160 74 142 44 C128 16 215 6 205 46 C200 66 235 40 262 36"/><path class="lurus" pathLength="1" d="M262 36 C310 30 350 38 432 36"/></svg>
+{% for nama, ket in [('Laporan Basis Data','Kumpulkan bahan'),('Presentasi Psikologi','Susun kerangka'),('Tugas Kelompok','Balas pesan tim')] %}<div class="kertas k{{ loop.index }}"><i><b>✓</b></i><span><strong>{{ nama }}</strong><small>{{ ket }}</small></span></div>{% endfor %}
+</div>
 <div class="catatan">Web ini dapat membantu manajemen stres, tetapi bukan pengganti layanan kesehatan mental.</div></div>
 <div class="kanan"><div style="width:100%;max-width:404px">
 <div class="tabs"><a class="{{ 'on' if tab=='daftar' }}" href="{{ url_for('daftar') }}">Daftar</a><a class="{{ 'on' if tab=='masuk' }}" href="{{ url_for('daftar', tab='masuk') }}">Masuk</a></div>
