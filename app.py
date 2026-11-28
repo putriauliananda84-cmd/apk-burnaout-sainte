@@ -79,6 +79,26 @@ with engine.begin() as koneksi:
         )
     """))
 
+# Kolom nama & email di riwayat_masuk supaya mudah dibaca di Supabase
+for _nama, _tipe in [("nama", "VARCHAR(120)"), ("email", "VARCHAR(320)")]:
+    try:
+        with engine.begin() as koneksi:
+            if DATABASE_URL.startswith("sqlite:"):
+                koneksi.execute(text(f"ALTER TABLE riwayat_masuk ADD COLUMN {_nama} {_tipe}"))
+            else:
+                koneksi.execute(text(f"ALTER TABLE riwayat_masuk ADD COLUMN IF NOT EXISTS {_nama} {_tipe}"))
+    except Exception:
+        pass
+try:
+    with engine.begin() as koneksi:  # isi nama untuk baris lama yang masih kosong
+        koneksi.execute(text(
+            "UPDATE riwayat_masuk SET "
+            "nama = (SELECT u.nama FROM users u WHERE u.id = riwayat_masuk.user_id), "
+            "email = (SELECT u.email FROM users u WHERE u.id = riwayat_masuk.user_id) "
+            "WHERE nama IS NULL"))
+except Exception as e:
+    print("[riwayat_masuk] isi nama gagal:", e)
+
 # Kolom tambahan di tabel users (aman dijalankan berulang; akun lama tetap utuh)
 KOLOM_BARU = [
     ("state_data", "TEXT NOT NULL DEFAULT '{}'"),
@@ -383,14 +403,14 @@ def konteks():
 def index():
     return redirect(url_for("beranda" if g.user else "daftar"))
 
-def catat_masuk(user_id):
+def catat_masuk(user_id, nama=None, email=None):
     """Catat login: terakhir masuk, jumlah masuk, dan satu baris di riwayat_masuk."""
     waktu = sekarang().isoformat(timespec="seconds")
     try:
         with engine.begin() as koneksi:
             koneksi.execute(
-                text("INSERT INTO riwayat_masuk (id, user_id, waktu) VALUES (:i, :u, :w)"),
-                {"i": str(uuid.uuid4()), "u": user_id, "w": waktu},
+                text("INSERT INTO riwayat_masuk (id, user_id, nama, email, waktu) VALUES (:i, :u, :n, :e, :w)"),
+                {"i": str(uuid.uuid4()), "u": user_id, "n": nama, "e": email, "w": waktu},
             )
             koneksi.execute(
                 text("UPDATE users SET terakhir_masuk = :w, terakhir_aktif = :w, "
@@ -434,17 +454,17 @@ def daftar():
                 return redirect(url_for("daftar", tab="masuk"))
             session.clear()
             session["user_id"] = user_id
-            catat_masuk(user_id)
+            catat_masuk(user_id, nama, email)
             return redirect(url_for("panduan"))
         with engine.connect() as koneksi:
             u = koneksi.execute(
-                text("SELECT id, sandi FROM users WHERE email = :email"),
+                text("SELECT id, nama, email, sandi FROM users WHERE email = :email"),
                 {"email": email},
             ).mappings().first()
         if u and check_password_hash(u["sandi"], sandi):
             session.clear()
             session["user_id"] = u["id"]
-            catat_masuk(u["id"])
+            catat_masuk(u["id"], u["nama"], u["email"])
             return redirect(url_for("beranda"))
         flash("Email atau kata sandi belum cocok.")
         return redirect(url_for("daftar", tab="masuk"))
