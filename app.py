@@ -30,13 +30,6 @@ try:
     load_dotenv()
 except ImportError:
     pass
-from sqlalchemy.pool import NullPool
-
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "local-development-only-secret")
 app.config.update(
@@ -53,6 +46,9 @@ if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
 elif DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
+if DATABASE_URL.startswith("postgresql") and "sslmode=" not in DATABASE_URL:
+    # Supabase mewajibkan koneksi SSL
+    DATABASE_URL += ("&" if "?" in DATABASE_URL else "?") + "sslmode=require"
 
 engine_options = {"pool_pre_ping": True}
 if DATABASE_URL.startswith("sqlite:"):
@@ -63,6 +59,7 @@ else:
     if os.environ.get("VERCEL"):
         engine_options["poolclass"] = NullPool
 engine = create_engine(DATABASE_URL, **engine_options)
+print("[DB] Memakai", "SQLite lokal (data TIDAK masuk Supabase)" if DATABASE_URL.startswith("sqlite:") else "PostgreSQL / Supabase")
 
 with engine.begin() as koneksi:
     koneksi.execute(text("""
@@ -74,11 +71,30 @@ with engine.begin() as koneksi:
             state_data TEXT NOT NULL
         )
     """))
-    if not DATABASE_URL.startswith("sqlite:"):
-        # Jaga-jaga kalau tabel users di Supabase belum punya kolom state_data
-        koneksi.execute(text(
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS state_data TEXT NOT NULL DEFAULT '{}'"
-        ))
+    koneksi.execute(text("""
+        CREATE TABLE IF NOT EXISTS riwayat_masuk (
+            id VARCHAR(36) PRIMARY KEY,
+            user_id VARCHAR(36) NOT NULL,
+            waktu VARCHAR(25) NOT NULL
+        )
+    """))
+
+# Kolom tambahan di tabel users (aman dijalankan berulang; akun lama tetap utuh)
+KOLOM_BARU = [
+    ("state_data", "TEXT NOT NULL DEFAULT '{}'"),
+    ("terakhir_masuk", "VARCHAR(25)"),
+    ("terakhir_aktif", "VARCHAR(25)"),
+    ("jumlah_masuk", "INTEGER NOT NULL DEFAULT 0"),
+]
+for _nama, _tipe in KOLOM_BARU:
+    try:
+        with engine.begin() as koneksi:
+            if DATABASE_URL.startswith("sqlite:"):
+                koneksi.execute(text(f"ALTER TABLE users ADD COLUMN {_nama} {_tipe}"))
+            else:
+                koneksi.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {_nama} {_tipe}"))
+    except Exception:
+        pass  # kolom sudah ada (SQLite tidak mendukung IF NOT EXISTS)
 
 # GANTI DENGAN LINK ASLI KONSELING KAMPUSMU
 KONSELING_URL = "https://www.example.ac.id/layanan-konseling"
@@ -168,8 +184,9 @@ def simpan_state(response):
     if g.user is not None and session.get("user_id") == g.user["id"]:
         with engine.begin() as koneksi:
             koneksi.execute(
-                text("UPDATE users SET state_data = :state_data WHERE id = :id"),
-                {"state_data": serialisasi_state(g.user_state), "id": g.user["id"]},
+                text("UPDATE users SET state_data = :state_data, terakhir_aktif = :waktu WHERE id = :id"),
+                {"state_data": serialisasi_state(g.user_state), "id": g.user["id"],
+                 "waktu": sekarang().isoformat(timespec="seconds")},
             )
     return response
 
@@ -366,6 +383,23 @@ def konteks():
 def index():
     return redirect(url_for("beranda" if g.user else "daftar"))
 
+def catat_masuk(user_id):
+    """Catat login: terakhir masuk, jumlah masuk, dan satu baris di riwayat_masuk."""
+    waktu = sekarang().isoformat(timespec="seconds")
+    try:
+        with engine.begin() as koneksi:
+            koneksi.execute(
+                text("INSERT INTO riwayat_masuk (id, user_id, waktu) VALUES (:i, :u, :w)"),
+                {"i": str(uuid.uuid4()), "u": user_id, "w": waktu},
+            )
+            koneksi.execute(
+                text("UPDATE users SET terakhir_masuk = :w, terakhir_aktif = :w, "
+                     "jumlah_masuk = COALESCE(jumlah_masuk, 0) + 1 WHERE id = :u"),
+                {"w": waktu, "u": user_id},
+            )
+    except Exception as e:  # pencatatan gagal tidak boleh menggagalkan login
+        print("[catat_masuk] gagal:", e)
+
 @app.route("/daftar", methods=["GET", "POST"])
 def daftar():
     tab = request.args.get("tab", "daftar")
@@ -400,6 +434,7 @@ def daftar():
                 return redirect(url_for("daftar", tab="masuk"))
             session.clear()
             session["user_id"] = user_id
+            catat_masuk(user_id)
             return redirect(url_for("panduan"))
         with engine.connect() as koneksi:
             u = koneksi.execute(
@@ -409,6 +444,7 @@ def daftar():
         if u and check_password_hash(u["sandi"], sandi):
             session.clear()
             session["user_id"] = u["id"]
+            catat_masuk(u["id"])
             return redirect(url_for("beranda"))
         flash("Email atau kata sandi belum cocok.")
         return redirect(url_for("daftar", tab="masuk"))
