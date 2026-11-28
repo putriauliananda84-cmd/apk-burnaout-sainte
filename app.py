@@ -873,6 +873,40 @@ CSS += """
 @media(max-width:850px){.masuk-hidup .kiri{padding:28px 22px}.masuk-hidup h1.big{font-size:34px;margin-top:20px}.k1{--x:12px}.k2{--x:-8px}.k3{--x:16px}}
 """
 
+CSS += """
+/* Parallax: --dalam makin besar, lapisan terasa makin dekat */
+.masuk-hidup .kiri{--mx:0;--my:0}
+.masuk-hidup .logo,.masuk-hidup h1.big,.masuk-hidup .sub,.masuk-hidup ul,.masuk-hidup .benang,.masuk-hidup .kertas,.masuk-hidup .daun{translate:calc(var(--mx)*var(--dalam)*1px) calc(var(--my)*var(--dalam)*1px)}
+.masuk-hidup .logo{--dalam:4}.masuk-hidup h1.big{--dalam:9}.masuk-hidup .sub{--dalam:6}.masuk-hidup ul{--dalam:8}
+.masuk-hidup .benang{--dalam:20}.masuk-hidup .k1{--dalam:11}.masuk-hidup .k2{--dalam:17}.masuk-hidup .k3{--dalam:24}
+.masuk-hidup .kiri::before{translate:calc(var(--mx)*-45px) calc(var(--my)*-45px)}
+.masuk-hidup .kiri::after{translate:calc(var(--mx)*55px) calc(var(--my)*55px)}
+.daun{position:absolute;z-index:-1;opacity:.55;pointer-events:none;line-height:1}
+@media(max-width:850px){.masuk-hidup .logo,.masuk-hidup h1.big,.masuk-hidup .sub,.masuk-hidup ul{translate:none}}
+@media(prefers-reduced-motion:reduce){.masuk-hidup *,.masuk-hidup .kiri::before,.masuk-hidup .kiri::after{translate:none!important}}
+"""
+
+# Parallax halaman masuk: tiap lapisan bergerak dengan jarak berbeda
+PARALAKS_JS = """
+<script>
+(function(){
+const panel=document.querySelector('.masuk-hidup .kiri');
+if(!panel||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+let tx=0,ty=0,x=0,y=0,jalan=false;
+function gambar(){
+  x+=(tx-x)*0.08;y+=(ty-y)*0.08; // gerak halus
+  panel.style.setProperty('--mx',x.toFixed(4));panel.style.setProperty('--my',y.toFixed(4));
+  if(Math.abs(tx-x)>0.001||Math.abs(ty-y)>0.001)requestAnimationFrame(gambar);else jalan=false;
+}
+function ke(a,b){tx=Math.max(-1,Math.min(1,a));ty=Math.max(-1,Math.min(1,b));if(!jalan){jalan=true;requestAnimationFrame(gambar)}}
+// Laptop: mengikuti kursor
+addEventListener('pointermove',e=>{if(e.pointerType==='mouse')ke(e.clientX/innerWidth*2-1,e.clientY/innerHeight*2-1)});
+document.documentElement.addEventListener('mouseleave',()=>ke(0,0));
+// HP: mengikuti guliran layar
+addEventListener('scroll',()=>{if(matchMedia('(hover: none),(max-width: 850px)').matches)ke(0,scrollY/(panel.offsetHeight||1)*2)},{passive:true});
+})();
+</script>"""
+
 PAGES = {}
 
 # Suara pengingat: memutar static/pengingat.mp3; kalau file tidak ada, bunyi "ting-ting"
@@ -924,13 +958,14 @@ PAGES["base.html"] = """<!doctype html><html lang="id"><head><meta charset="utf-
 <a class="kecil" href="{{ url_for('keluar') }}" style="background:#ffe0e0;color:#8b1e1e;font-weight:700">Logout</a></div></aside>
 <main>{% for m in get_flashed_messages() %}<div class="flash">{{ m }}</div>{% endfor %}{% block content %}{% endblock %}</main></div>{% endblock %}</body></html>"""
 
-PAGES["daftar.html"] = """{% extends 'base.html' %}{% block body %}<div class="auth masuk-hidup"><div class="kiri"><div class="logo">TenangTugas</div>
+PAGES["daftar.html"] = """{% extends 'base.html' %}{% block body %}<div class="auth masuk-hidup"><div class="kiri">
+{% for x, y, ukuran, dalam, isi in [(78,26,34,60,'🍃'),(88,62,22,34,'🌿'),(63,8,16,22,'🍃'),(8,91,26,48,'🌿'),(93,84,14,18,'🍃')] %}<span class="daun" aria-hidden="true" style="left:{{ x }}%;top:{{ y }}%;font-size:{{ ukuran }}px;--dalam:{{ dalam }}">{{ isi }}</span>{% endfor %}<div class="logo">TenangTugas</div>
 <h1 class="big" aria-label="Tugas banyak? Mari kita urai pelan-pelan.">{% for k in ['Tugas','banyak?','Mari','kita','urai'] %}<span class="kata" aria-hidden="true" style="--n:{{ loop.index0 }}">{{ k }}</span> {% endfor %}<span class="kata" aria-hidden="true" style="--n:5"><em>pelan-pelan.<svg viewBox="0 0 300 18" preserveAspectRatio="none"><path pathLength="1" d="M4 12 C60 2 110 17 165 9 S255 5 296 10"/></svg></em></span></h1>
 <p class="sub">TenangTugas membantu mahasiswa mengelola tugas yang menumpuk sekaligus menurunkan stres akademik.</p>
 <ul><li>🟢 Memecah tugas jadi langkah kecil</li><li>🔵 Menentukan prioritas dengan tenang</li><li>🟡 Ada jeda relaksasi untuk menenangkan diri</li></ul>
 <div class="urai" aria-hidden="true">
 <svg class="benang" viewBox="0 0 440 70"><path class="kusut" pathLength="1" d="M8 38 C60 -8 112 78 82 50 C45 12 150 2 128 46 C108 82 72 14 160 20 C240 26 160 74 142 44 C128 16 215 6 205 46 C200 66 235 40 262 36"/><path class="lurus" pathLength="1" d="M262 36 C310 30 350 38 432 36"/></svg>
-{% for nama, ket in [('Laporan Basis Data','Kumpulkan bahan'),('Presentasi Psikologi','Susun kerangka'),('Tugas Kelompok','Balas pesan tim')] %}<div class="kertas k{{ loop.index }}"><i><b>✓</b></i><span><strong>{{ nama }}</strong><small>{{ ket }}</small></span></div>{% endfor %}
+{% for nama, ket in [('Tulis semua tugas','Keluarkan dulu dari kepala'),('Pilih satu dulu','Sisanya boleh menunggu'),('Kerjakan pelan-pelan','Satu langkah kecil sudah cukup')] %}<div class="kertas k{{ loop.index }}"><i><b>✓</b></i><span><strong>{{ nama }}</strong><small>{{ ket }}</small></span></div>{% endfor %}
 </div>
 <div class="catatan">Web ini dapat membantu manajemen stres, tetapi bukan pengganti layanan kesehatan mental.</div></div>
 <div class="kanan"><div style="width:100%;max-width:404px">
@@ -943,7 +978,7 @@ PAGES["daftar.html"] = """{% extends 'base.html' %}{% block body %}<div class="a
 <form method="post"><input type="hidden" name="aksi" value="daftar"><label>Nama panggilan</label><input name="nama">
 <label>Email</label><input name="email" type="email" placeholder="nama@email.com"><label>Kata sandi</label><div style="display:flex;gap:6px"><input name="sandi" type="password" id="sandi_daftar" placeholder="Minimal 8 karakter" style="flex:1"><button type="button" class="btn o" style="padding:12px 14px;width:auto;margin:4px 0 12px" onclick="let i=document.getElementById('sandi_daftar');i.type=i.type=='password'?'text':'password'">👀</button></div>
 <button class="btn full">Buat akun</button></form>{% endif %}
-<p class="meta" style="text-align:center;margin-top:18px">Catatan stres harianmu bersifat pribadi.</p></div></div></div>{% endblock %}"""
+<p class="meta" style="text-align:center;margin-top:18px">Catatan stres harianmu bersifat pribadi.</p></div></div></div>""" + PARALAKS_JS + """{% endblock %}"""
 
 PAGES["panduan.html"] = """{% extends 'base.html' %}{% block body %}<div class="top"><div class="logo" style="margin:0">TenangTugas</div>
 <div class="meta">Panduan singkat · sekitar 1 menit &nbsp; <a href="{{ url_for('beranda') }}"><b>Lewati</b></a></div></div>
@@ -1113,6 +1148,58 @@ PAGES["darurat.html"] = """{% extends 'base.html' %}{% block content %}<h1>Mode 
 <p class="meta">Web ini bukan pengganti layanan kesehatan mental.</p>""" + NAPAS_JS + """{% endblock %}"""
 
 PAGES["base.html"] = PAGES["base.html"].replace("</main></div>{% endblock %}", "</main></div>" + UI_HTML + "{% endblock %}")
+# ----------------------------------------------------------------------------
+# Parallax untuk semua halaman setelah halaman Daftar/Masuk
+# ----------------------------------------------------------------------------
+CSS += """
+/* --px/--py mengikuti kursor, --gulir mengikuti guliran. --jarak = kedalaman */
+:root{--px:0;--py:0;--gulir:0}
+main h1,.wrap h1{--jarak:7}main .sub,.wrap .sub{--jarak:4}.card,.fitur,.profil{--jarak:3}
+.grid2>div:nth-child(2) .card,.grid3>.fitur:nth-child(3n+2),.grid4>.card:nth-child(even){--jarak:6}
+main h1,.wrap h1,main .sub,.wrap .sub,.card,.fitur,.profil{translate:calc(var(--px)*var(--jarak)*1px) calc(var(--py)*var(--jarak)*1px)}
+/* Latar: bergerak paling jauh, juga saat digulir */
+.antigravitasi i,.hiasan i{translate:calc(var(--px)*var(--jarak)*1px) calc(var(--py)*var(--jarak)*1px - var(--gulir)*var(--laju)*1px)}
+.antigravitasi i{--jarak:20;--laju:.06}.antigravitasi i:nth-child(3n+1){--jarak:38;--laju:.14}.antigravitasi i:nth-child(3n+2){--jarak:56;--laju:.24}
+.hiasan{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:0}.hiasan i{position:absolute;font-style:normal;opacity:.4}
+.wrap,.top{position:relative;z-index:1}
+.tanpa-gerak main *,.tanpa-gerak .antigravitasi i{translate:none!important}
+@media(hover:none),(max-width:850px){main h1,.wrap h1,main .sub,.wrap .sub,.card,.fitur,.profil{translate:none}}
+@media(prefers-reduced-motion:reduce){main h1,.wrap h1,main .sub,.wrap .sub,.card,.fitur,.profil,.antigravitasi i,.hiasan i{translate:none!important}}
+"""
+
+PARALAKS_UMUM = """
+<script>
+(function(){
+if(document.querySelector('.masuk-hidup')||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+const html=document.documentElement;
+// Halaman tanpa lapisan latar (misalnya Panduan) diberi daun hiasan
+if(!document.querySelector('.antigravitasi')){
+  const h=document.createElement('div');h.className='hiasan';h.setAttribute('aria-hidden','true');
+  [[4,20,30,50,.12],[93,14,22,28,.07],[88,72,36,60,.2],[8,80,18,34,.1],[52,92,24,44,.16]].forEach(([x,y,u,d,k],n)=>{
+    const i=document.createElement('i');i.textContent=n%2?'🌿':'🍃';
+    i.style.cssText=`left:${x}%;top:${y}%;font-size:${u}px;--jarak:${d};--laju:${k}`;h.appendChild(i)});
+  document.body.appendChild(h);
+}
+let tx=0,ty=0,x=0,y=0,jalan=false;
+function gambar(){
+  x+=(tx-x)*0.08;y+=(ty-y)*0.08;
+  html.style.setProperty('--px',x.toFixed(4));html.style.setProperty('--py',y.toFixed(4));
+  if(Math.abs(tx-x)>0.001||Math.abs(ty-y)>0.001)requestAnimationFrame(gambar);else jalan=false;
+}
+addEventListener('pointermove',e=>{
+  if(e.pointerType!=='mouse')return;
+  // diam saat sedang mengisi formulir
+  if(document.activeElement&&document.activeElement.matches('input,textarea,select'))return;
+  tx=e.clientX/innerWidth*2-1;ty=e.clientY/innerHeight*2-1;
+  if(!jalan){jalan=true;requestAnimationFrame(gambar)}
+});
+let tunggu=false;
+function gulir(){if(tunggu)return;tunggu=true;requestAnimationFrame(()=>{html.style.setProperty('--gulir',Math.min(scrollY,1500));tunggu=false})}
+addEventListener('scroll',gulir,{passive:true});gulir();
+})();
+</script>"""
+
+PAGES["base.html"] = PAGES["base.html"].replace("</body></html>", PARALAKS_UMUM + "</body></html>")
 app.jinja_loader = DictLoader(PAGES)
 
 if __name__ == "__main__":
