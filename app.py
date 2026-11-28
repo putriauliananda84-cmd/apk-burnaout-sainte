@@ -13,7 +13,7 @@ import copy
 import json
 import os
 import uuid
-from datetime import date, timedelta, datetime
+from datetime import date, timedelta, datetime, timezone
 from functools import wraps
 from math import ceil
 
@@ -70,6 +70,20 @@ BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli",
 MOODS = ["Tenang", "Baik", "Biasa saja", "Cemas", "Kewalahan"]  # skor stres 1..5
 MOOD_EMOJI = ["😌", "🙂", "😐", "😟", "😣"]
 KESULITAN = ["Mudah", "Sedang", "Sulit"]
+# Total durasi langkah kecil, ditentukan dari tingkat kesulitan
+MENIT_KESULITAN = {"Mudah": 50, "Sedang": 75, "Sulit": 100}
+JAM_DEFAULT = "23:59"
+
+def sekarang():
+    # Di komputer sendiri memakai jam komputer. Di Vercel (server UTC) memakai
+    # ZONA_UTC: 7 = WIB, 8 = WITA, 9 = WIT.
+    zona = os.environ.get("ZONA_UTC") or ("7" if os.environ.get("VERCEL") else None)
+    if zona is None:
+        return datetime.now()
+    return datetime.now(timezone(timedelta(hours=int(zona)))).replace(tzinfo=None)
+
+def hari_ini_lokal():
+    return sekarang().date()
 
 # ----------------------------------------------------------------------------
 # Data per akun
@@ -167,8 +181,29 @@ def pecah_tugas(menit, kesulitan):
     inti["m"] = max(5, inti["m"] + selisih)
     return hasil
 
+def jam_tugas(t):
+    return t.get("jam") or JAM_DEFAULT  # tugas lama belum punya jam
+
+def waktu_tenggat(t):
+    if t["deadline"] is None:
+        return datetime.max
+    return datetime.combine(t["deadline"], datetime.strptime(jam_tugas(t), "%H:%M").time())
+
+def terlambat(t):
+    return waktu_tenggat(t) < sekarang()
+
+def tugas_mendesak():
+    # Sudah lewat, tenggat hari ini, atau tenggat besok
+    hasil = [t for t in aktif() if t["deadline"] and sisa_hari(t) <= 1]
+    return sorted(hasil, key=waktu_tenggat)
+
+def fmt_tenggat(t):
+    if t["deadline"] is None:
+        return "-"
+    return f"{fmt_tgl(t['deadline'])}, pukul {jam_tugas(t).replace(':', '.')}"
+
 def sisa_hari(t):
-    return None if t["deadline"] is None else (t["deadline"] - date.today()).days
+    return None if t["deadline"] is None else (t["deadline"] - hari_ini_lokal()).days
 
 def kuadran(t):
     s = sisa_hari(t)
@@ -185,8 +220,7 @@ def kuadran(t):
 NAMA_KUADRAN = ["Kerjakan dulu", "Jadwalkan", "Singkat saja", "Lepas dulu"]
 
 def urut_prioritas(tugas):
-    far = date.max
-    return sorted(tugas, key=lambda t: (kuadran(t), t["deadline"] or far))
+    return sorted(tugas, key=lambda t: (kuadran(t), waktu_tenggat(t)))
 
 def aktif():
     return [t for t in STATE["tasks"] if not t["selesai"]]
@@ -220,7 +254,7 @@ def langkah_terkecil(n=3):
     return hasil
 
 def data_mingguan():
-    hari = [date.today() - timedelta(days=i) for i in range(6, -1, -1)]
+    hari = [hari_ini_lokal() - timedelta(days=i) for i in range(6, -1, -1)]
     nyata = [STATE["stres"].get(d, {}).get("skor") for d in hari]
     contoh = not any(nyata)
     if contoh:
@@ -261,9 +295,9 @@ def fmt_menit(m):
 def cari_tugas(tid):
     return next((t for t in STATE["tasks"] if t["id"] == tid), None)
 
-def tambah_tugas(judul, matkul, deadline, menit, kesulitan):
+def tambah_tugas(judul, matkul, deadline, jam, kesulitan):
     t = {"id": STATE["next_id"], "judul": judul.strip(), "matkul": matkul.strip() or "-",
-         "deadline": deadline, "menit": menit, "kesulitan": kesulitan, "langkah": [], "selesai": False}
+         "deadline": deadline, "jam": jam, "kesulitan": kesulitan, "langkah": [], "selesai": False}
     STATE["next_id"] += 1
     STATE["tasks"].append(t)
     return t
@@ -273,6 +307,12 @@ def baca_tanggal(s):
         return datetime.strptime(s, "%Y-%m-%d").date() if s else None
     except ValueError:
         return None
+
+def baca_jam(s, default=JAM_DEFAULT):
+    try:
+        return datetime.strptime(s, "%H:%M").strftime("%H:%M")
+    except (TypeError, ValueError):
+        return default
 
 def baca_menit(s, default=60):
     try:
@@ -292,7 +332,8 @@ def wajib_masuk(f):
 def konteks():
     return dict(user=g.user, fmt_tgl=fmt_tgl, fmt_menit=fmt_menit, css=CSS, endpoint=request.endpoint,
                 MOODS=MOODS, MOOD_EMOJI=MOOD_EMOJI, KESULITAN=KESULITAN, sisa_hari=sisa_hari,
-                kuadran=kuadran, NAMA_KUADRAN=NAMA_KUADRAN, KONSELING_URL=KONSELING_URL)
+                kuadran=kuadran, jam_tugas=jam_tugas, fmt_tenggat=fmt_tenggat,
+                terlambat=terlambat, NAMA_KUADRAN=NAMA_KUADRAN, KONSELING_URL=KONSELING_URL)
 
 # ----------------------------------------------------------------------------
 # Rute: akun dan panduan
@@ -366,7 +407,7 @@ FITUR = [
     ("Brain Dump", "Tulis semua tugas tanpa harus langsung mengatur.", "braindump", "g"),
     ("Pemecah Tugas", "Pecah tugas besar menjadi langkah-langkah kecil yang mudah dimulai.", "pemecah", "g"),
     ("Matriks Prioritas", "Pilah tugas: mendesak dan penting, penting tapi tidak mendesak, dan seterusnya.", "rencana", "g"),
-    ("Kalender dan Pengingat", "Lihat tenggat, perkiraan waktu, dan pengingat sebelum deadline.", "tugas", "b"),
+    ("Kalender dan Pengingat", "Lihat tanggal dan jam tenggat, serta pengingat sebelum deadline.", "tugas", "b"),
     ("Mode Fokus", "Timer Pomodoro 25 menit kerja dan 5 menit istirahat, dengan pelacak progres.", "rencana", "b"),
     ("Cek Stres Harian", "Pilih satu reaksi untuk perasaanmu hari ini, lalu jawab apa yang paling membuatmu cemas.", "beranda", "y"),
     ("Ruang Tenang", "Latihan napas, audio hujan atau white noise, dan jurnal singkat.", "ruang_tenang", "y"),
@@ -376,10 +417,10 @@ FITUR = [
 @app.route("/beranda")
 @wajib_masuk
 def beranda():
-    hari_ini = date.today()
+    hari_ini = hari_ini_lokal()
     aktif_list = aktif()
-    terdekat = sorted([t for t in aktif_list if t["deadline"]], key=lambda t: t["deadline"])[:3]
-    ada_mendesak = any(sisa_hari(t) is not None and sisa_hari(t) <= 1 for t in aktif_list)
+    terdekat = sorted([t for t in aktif_list if t["deadline"]], key=waktu_tenggat)[:3]
+    mendesak = tugas_mendesak()
     hari = STATE["stres"].get(hari_ini)
     pesan = pesan_stres(hari["skor"]) if hari else None
     riwayat = sorted(STATE["stres"].items(), reverse=True)[:5]
@@ -389,7 +430,7 @@ def beranda():
         ("Isi cek stres hari ini", hari_ini in STATE["stres"]),
         ("Coba Ruang Tenang", bool(STATE["jurnal"])),
     ]
-    return render_template("beranda.html", ada_mendesak=ada_mendesak, ada_tugas=bool(STATE["tasks"]),
+    return render_template("beranda.html", mendesak=mendesak, FITUR=FITUR, ada_tugas=bool(STATE["tasks"]),
         pesan=pesan, riwayat=riwayat, fokus=fokus_tiga(), mulai=mulai, terdekat=terdekat)
 
 @app.route("/cek-stres", methods=["POST"])
@@ -397,7 +438,7 @@ def beranda():
 def cek_stres():
     mood = request.form.get("mood")
     if mood in MOODS:
-        STATE["stres"][date.today()] = {"skor": MOODS.index(mood) + 1,
+        STATE["stres"][hari_ini_lokal()] = {"skor": MOODS.index(mood) + 1,
                                         "catatan": request.form.get("catatan", "").strip()}
     return redirect(url_for("beranda"))
 
@@ -423,12 +464,12 @@ def atur_tenggat():
     if request.method == "POST":
         for i, judul in enumerate(baris):
             tambah_tugas(judul, request.form.get(f"matkul{i}", ""), baca_tanggal(request.form.get(f"tgl{i}")),
-                         baca_menit(request.form.get(f"menit{i}")), request.form.get(f"sulit{i}", "Sedang"))
+                         baca_jam(request.form.get(f"jam{i}")), request.form.get(f"sulit{i}", "Sedang"))
         STATE["braindump"] = []
         return redirect(url_for("tugas"))
     if not baris:
         return redirect(url_for("braindump"))
-    return render_template("atur_tenggat.html", baris=baris, default=(date.today() + timedelta(days=3)).isoformat())
+    return render_template("atur_tenggat.html", baris=baris, default=(hari_ini_lokal() + timedelta(days=3)).isoformat())
 
 @app.route("/kalender/<int:id>")
 @wajib_masuk
@@ -436,12 +477,13 @@ def kalender(id):
     t = cari_tugas(id)
     if not t or not t["deadline"]:
         return "Tugas tidak ditemukan", 404
-    d = t["deadline"].strftime("%Y%m%d")
+    mulai = waktu_tenggat(t)
+    akhir = mulai + timedelta(hours=1)
     ics = f"""BEGIN:VCALENDAR
 VERSION:2.0
 BEGIN:VEVENT
-DTSTART:{d}T090000
-DTEND:{d}T100000
+DTSTART:{mulai:%Y%m%dT%H%M%S}
+DTEND:{akhir:%Y%m%dT%H%M%S}
 SUMMARY:Tenggat: {t['judul']}
 DESCRIPTION:{t.get('matkul', '')} - dari web TenangTugas
 END:VEVENT
@@ -453,12 +495,14 @@ END:VCALENDAR"""
 @wajib_masuk
 def tugas():
     f = request.args.get("f", "hari")
-    h = date.today()
+    h = hari_ini_lokal()
     daftar_ = STATE["tasks"]
     if f == "selesai":
         hasil = [t for t in daftar_ if t["selesai"]]
     elif f == "terlambat":
-        hasil = [t for t in aktif() if t["deadline"] and t["deadline"] < h]
+        hasil = [t for t in aktif() if terlambat(t)]
+    elif f == "mendesak":
+        hasil = tugas_mendesak()
     elif f == "minggu":
         hasil = [t for t in aktif() if t["deadline"] is None or h <= t["deadline"] <= h + timedelta(days=6)]
     else:
@@ -474,7 +518,7 @@ def tugas_tambah():
         flash("Judul tugas wajib diisi.")
     else:
         tambah_tugas(judul, request.form.get("matkul", ""), baca_tanggal(request.form.get("tgl")),
-                     baca_menit(request.form.get("menit")), request.form.get("sulit", "Sedang"))
+                     baca_jam(request.form.get("jam")), request.form.get("sulit", "Sedang"))
     return redirect(request.referrer or url_for("tugas"))
 
 @app.route("/tugas/<int:tid>/selesai", methods=["POST"])
@@ -505,9 +549,9 @@ def pemecah():
         if aksi == "pecah":
             pilih["matkul"] = request.form.get("matkul", pilih["matkul"]).strip() or "-"
             pilih["deadline"] = baca_tanggal(request.form.get("tgl")) or pilih["deadline"]
-            pilih["menit"] = baca_menit(request.form.get("menit"), pilih["menit"])
+            pilih["jam"] = baca_jam(request.form.get("jam"), jam_tugas(pilih))
             pilih["kesulitan"] = request.form.get("sulit", pilih["kesulitan"])
-            pilih["langkah"] = pecah_tugas(pilih["menit"], pilih["kesulitan"])
+            pilih["langkah"] = pecah_tugas(MENIT_KESULITAN.get(pilih["kesulitan"], 75), pilih["kesulitan"])
         elif aksi == "simpan":
             baru = []
             for i in range(len(pilih["langkah"]) + 1):
@@ -547,7 +591,7 @@ def ruang_tenang():
     if request.method == "POST":
         teks = request.form.get("jurnal", "").strip()
         if teks:
-            STATE["jurnal"].insert(0, {"tgl": date.today(), "teks": teks})
+            STATE["jurnal"].insert(0, {"tgl": hari_ini_lokal(), "teks": teks})
         return redirect(url_for("ruang_tenang"))
     return render_template(
         "ruang_tenang.html",
@@ -629,6 +673,37 @@ transition:transform 4s ease-in-out;box-shadow:0 0 0 20px #bdd3e3,0 0 0 40px #dd
 
 PAGES = {}
 
+# Bunyi pengingat dibuat langsung di browser (tanpa file audio)
+SUARA_JS = """
+<script>
+(function(){
+const AC=window.AudioContext||window.webkitAudioContext;
+const info=document.getElementById('info_suara');
+if(!AC){info.textContent='Browser ini tidak mendukung suara.';return}
+const ctx=new AC();let nada=[],sudah=false,dimatikan=false;
+function bunyi(){
+  hentikan();sudah=true;info.textContent='';
+  // 3 kali "ting-ting"
+  for(let i=0;i<3;i++){[880,1175].forEach((f,j)=>{
+    const o=ctx.createOscillator(),v=ctx.createGain(),t=ctx.currentTime+i*0.9+j*0.22;
+    o.frequency.value=f;v.gain.setValueAtTime(0.0001,t);
+    v.gain.exponentialRampToValueAtTime(0.4,t+0.02);v.gain.exponentialRampToValueAtTime(0.0001,t+0.2);
+    o.connect(v);v.connect(ctx.destination);o.start(t);o.stop(t+0.22);nada.push(o)})}
+}
+function hentikan(){nada.forEach(o=>{try{o.stop()}catch(e){}});nada=[]}
+function otomatis(){if(!sudah&&!dimatikan&&ctx.state==='running')bunyi()}
+document.getElementById('putar_suara').onclick=()=>{dimatikan=false;ctx.resume().then(bunyi)};
+document.getElementById('stop_suara').onclick=()=>{dimatikan=true;hentikan();info.textContent='Suara dimatikan.'};
+// Coba bunyi saat halaman dibuka
+ctx.onstatechange=otomatis;otomatis();
+// Kalau browser memblokir, bunyi pada klik atau tombol pertama
+function pertama(e){if(e.target.closest&&e.target.closest('#stop_suara,#putar_suara,a'))return;
+  if(!sudah&&!dimatikan)ctx.resume().then(otomatis)}
+document.addEventListener('click',pertama);document.addEventListener('keydown',pertama);
+setTimeout(()=>{if(!sudah&&!dimatikan)info.textContent='Browser menahan suara otomatis. Klik di mana saja pada halaman untuk membunyikan pengingat.'},600);
+})();
+</script>"""
+
 PAGES["base.html"] = """<!doctype html><html lang="id"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>TenangTugas</title><style>{{ css|safe }}</style></head>
 <body>{% block body %}<div class="app"><aside><div class="logo">TenangTugas</div>
@@ -673,7 +748,11 @@ PAGES["panduan.html"] = """{% extends 'base.html' %}{% block body %}<div class="
 <a class="btn" href="{{ url_for('beranda') }}">Mengerti, ke Beranda</a>
 <p class="meta">Web ini bukan pengganti layanan kesehatan mental. Jika stres terasa berat atau terus-menerus, hubungi konseling kampus atau layanan kesehatan setempat.</p></div>{% endblock %}"""
 
-PAGES["beranda.html"] = """{% extends 'base.html' %}{% block content %} {% if ada_mendesak %}<div class="card" style="background:#ffe0e0;border:2px solid red"><h2>⚠️ Pengingat! Ada tugas yang tenggatnya besok!</h2><p>Buruan cek, jangan sampe kelewat. Pecah jadi langkah kecil dulu biar nggak panik.</p><a class="btn" href="{{ url_for('tugas') }}">Lihat Tugas Mendesak</a></div>{% endif %}<h1>Halo, {{ user.nama }}</h1>
+PAGES["beranda.html"] = """{% extends 'base.html' %}{% block content %} {% if mendesak %}<div class="card" style="background:#ffe0e0;border:2px solid red" role="alert"><h2>⚠️ Pengingat! Ada {{ mendesak|length }} tugas mendesak!</h2>
+<ul>{% for t in mendesak %}<li><b>{{ t.judul }}</b> - {{ fmt_tenggat(t) }} ({{ 'sudah lewat tenggat' if terlambat(t) else ('hari ini' if sisa_hari(t)==0 else 'besok') }})</li>{% endfor %}</ul>
+<p>Buruan cek, jangan sampe kelewat. Pecah jadi langkah kecil dulu biar nggak panik.</p><a class="btn" href="{{ url_for('tugas', f='mendesak') }}">Lihat Tugas Mendesak</a>
+<button type="button" class="btn o" id="putar_suara">🔔 Bunyikan</button> <button type="button" class="btn o" id="stop_suara">🔕 Matikan suara</button>
+<p class="meta" id="info_suara" aria-live="polite"></p></div>""" + SUARA_JS + """{% endif %}<h1>Halo, {{ user.nama }}</h1>
 <p class="sub">Ini Beranda-mu. Mulai dari yang paling kecil, satu langkah saja sudah cukup.</p>
 <div class="grid2"><div>
 {% if not ada_tugas %}<div class="card hero"><h2>Belum ada tugas. Mulai dari Brain Dump.</h2><p>Tuliskan semua tugasmu tanpa harus langsung mengatur. Nanti kita susun dan pecah bersama.</p>
@@ -688,7 +767,7 @@ PAGES["beranda.html"] = """{% extends 'base.html' %}{% block content %} {% if ad
 <a class="btn o" href="{{ url_for('pemecah', id=t.id) }}">Pecah</a></div>{% endfor %}
 {% else %}<p class="meta">Tiga tugas prioritasmu akan muncul di sini setelah kamu menulis tugas. Hanya yang penting hari ini yang ditampilkan, supaya layar tetap lega.</p>{% endif %}</div></div>
 <div><div class="card yel"><h2>Mulai di sini</h2>{% for teks, ok in mulai %}<p style="margin:6px 0">{{ '✅' if ok else '⭕' }} {{ teks }}</p>{% endfor %}</div>
-<div class="card"><h2>Tenggat terdekat</h2>{% for t in terdekat %}<p style="margin:6px 0"><b>{{ t.judul }}</b><br><span class="meta">{{ fmt_tgl(t.deadline) }}</span></p>
+<div class="card"><h2>Tenggat terdekat</h2>{% for t in terdekat %}<p style="margin:6px 0"><b>{{ t.judul }}</b><br><span class="meta">{{ fmt_tenggat(t) }}</span></p>
 {% else %}<p class="meta">Belum ada tenggat. Tambahkan saat kamu mengatur tugas.</p>{% endfor %}</div>
 <div class="card blue"><h2 style="color:var(--navy)">Ruang Tenang</h2><p>Latihan napas 4-7-8 atau napas kotak selama 1 sampai 3 menit, kapan pun kamu butuh jeda.</p>
 <a class="btn o" href="{{ url_for('ruang_tenang') }}" style="color:var(--navy);border-color:var(--navy)">Coba napas 1 menit</a></div></div></div>
@@ -703,17 +782,17 @@ PAGES["braindump.html"] = """{% extends 'base.html' %}{% block content %}<h1>Tul
 <div class="card lyel"><h2>Boleh berantakan</h2><p>Tugas kuliah, urusan organisasi, atau hal kecil yang mengganjal, semuanya boleh masuk. Kamu bisa menghapus atau menggabungkan nanti.</p></div>
 <p class="meta"><i>Kamu tidak perlu menyelesaikan semuanya hari ini; cukup langkah berikutnya.</i></p></div></div>{% endblock %}"""
 
-PAGES["atur_tenggat.html"] = """{% extends 'base.html' %}{% block content %}<h1>Atur tenggat</h1><p class="sub">Isi seperlunya. Perkiraan waktu dipakai untuk memecah tugas menjadi langkah kecil.</p>
+PAGES["atur_tenggat.html"] = """{% extends 'base.html' %}{% block content %}<h1>Atur tenggat</h1><p class="sub">Isi seperlunya. Tingkat kesulitan dipakai untuk memecah tugas menjadi langkah kecil.</p>
 <form method="post">{% for b in baris %}{% set i = loop.index0 %}<div class="card"><h3>{{ b }}</h3><div class="grid4">
 <div><label>Mata kuliah</label><input name="matkul{{ i }}"></div><div><label>Tenggat</label><input type="date" name="tgl{{ i }}" value="{{ default }}"></div>
-<div><label>Perkiraan waktu (menit)</label><input type="number" min="5" step="5" name="menit{{ i }}" value="60"></div>
+<div><label>Jam tenggat</label><input type="time" name="jam{{ i }}" value="23:00"></div>
 <div><label>Tingkat kesulitan</label><select name="sulit{{ i }}">{% for k in KESULITAN %}<option {{ 'selected' if k=='Sedang' }}>{{ k }}</option>{% endfor %}</select></div></div></div>{% endfor %}
 <button class="btn">Simpan ke daftar tugas</button></form>{% endblock %}"""
 
 PAGES["tugas.html"] = """{% extends 'base.html' %}{% block content %}<h1>Tugas</h1><div class="tabs">
-{% for k, n in [('hari','Hari ini'),('minggu','Minggu ini'),('selesai','Selesai'),('terlambat','Terlambat')] %}<a class="{{ 'on' if f==k }}" href="{{ url_for('tugas', f=k) }}">{{ n }}</a>{% endfor %}</div>
+{% for k, n in [('mendesak','Mendesak'),('hari','Hari ini'),('minggu','Minggu ini'),('selesai','Selesai'),('terlambat','Terlambat')] %}<a class="{{ 'on' if f==k }}" href="{{ url_for('tugas', f=k) }}">{{ n }}</a>{% endfor %}</div>
 <div class="grid2"><div>{% for t in hasil %}<div class="card tugas q{{ kuadran(t) }}"><div class="row"><div><h2 style="margin:0">{{ t.judul }}</h2>
-<div class="meta">{{ t.matkul }} · {{ fmt_tgl(t.deadline) }} · {{ t.menit }} menit</div></div>
+<div class="meta">{{ t.matkul }} · {{ fmt_tenggat(t) }}</div></div>
 <span class="pill {{ 's' if t.kesulitan=='Sulit' }}">{{ t.kesulitan }}</span></div>
 {% if t.langkah %}<p class="meta" style="margin:14px 0 4px"><b>Langkah kecil yang disarankan</b></p>{% for l in t.langkah %}
 <form method="post" action="{{ url_for('langkah_centang', tid=t.id, i=loop.index0) }}"><label style="display:flex;gap:10px;align-items:center;font-weight:400;color:var(--dark)">
@@ -723,7 +802,7 @@ PAGES["tugas.html"] = """{% extends 'base.html' %}{% block content %}<h1>Tugas</
 {% else %}<div class="card"><p class="meta">Belum ada tugas di bagian ini. Tidak apa-apa, ambil napas dulu.</p><a class="btn o" href="{{ url_for('braindump') }}">Tulis di Brain Dump</a></div>{% endfor %}</div>
 <form method="post" action="{{ url_for('tugas_tambah') }}" class="card"><h2>Tambah tugas</h2><label>Judul</label><input name="judul" required><label>Mata kuliah</label><input name="matkul">
 <div class="grid2" style="grid-template-columns:1fr 1fr;gap:10px"><div><label>Tenggat</label><input type="date" name="tgl" value="{{ hari_ini }}"></div>
-<div><label>Estimasi (menit)</label><input type="number" name="menit" min="5" step="5" value="60"></div></div>
+<div><label>Jam tenggat</label><input type="time" name="jam" value="23:00"></div></div>
 <label>Tingkat kesulitan</label><select name="sulit">{% for k in KESULITAN %}<option {{ 'selected' if k=='Sedang' }}>{{ k }}</option>{% endfor %}</select><button class="btn full">Tambah tugas</button></form></div>{% endblock %}"""
 
 PAGES["pemecah.html"] = """{% extends 'base.html' %}{% block content %}<h1>Mulai dari satu tugas yang paling mengganggu</h1><p class="sub">Pilih satu saja dulu. Sisanya menunggu dengan tenang di daftar.</p>
@@ -731,7 +810,7 @@ PAGES["pemecah.html"] = """{% extends 'base.html' %}{% block content %}<h1>Mulai
 <div class="grid2" style="grid-template-columns:1fr 1.1fr"><div>{% for t in daftar %}<a href="{{ url_for('pemecah', id=t.id) }}" class="card" style="display:block;text-decoration:none;color:inherit;padding:16px;margin-bottom:10px;{{ 'background:var(--lg);border:2px solid var(--g)' if t.id==pilih.id }}">{{ '🔘' if t.id==pilih.id else '⚪' }} {{ t.judul }}</a>{% endfor %}
 <form method="post" class="card"><input type="hidden" name="aksi" value="pecah"><h2>Detail {{ pilih.judul }}</h2><div class="grid2" style="grid-template-columns:1fr 1fr;gap:10px">
 <div><label>Mata kuliah</label><input name="matkul" value="{{ pilih.matkul }}"></div><div><label>Tenggat</label><input type="date" name="tgl" value="{{ pilih.deadline.isoformat() if pilih.deadline }}"></div>
-<div><label>Perkiraan waktu (menit)</label><input type="number" name="menit" min="5" step="5" value="{{ pilih.menit }}"></div>
+<div><label>Jam tenggat</label><input type="time" name="jam" value="{{ jam_tugas(pilih) }}"></div>
 <div><label>Tingkat kesulitan</label><select name="sulit">{% for k in KESULITAN %}<option {{ 'selected' if k==pilih.kesulitan }}>{{ k }}</option>{% endfor %}</select></div></div>
 <button class="btn full">Pecah jadi langkah kecil</button></form></div>
 <form method="post" class="card"><input type="hidden" name="aksi" value="simpan"><div class="row"><h2>Saran langkah kecil</h2><span class="pill s">{{ pilih.langkah|length }} langkah</span></div>
