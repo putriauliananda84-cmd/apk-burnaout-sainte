@@ -23,7 +23,13 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
 from werkzeug.local import LocalProxy
 from werkzeug.security import check_password_hash, generate_password_hash
+from sqlalchemy.pool import NullPool
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "local-development-only-secret")
 app.config.update(
@@ -31,20 +37,24 @@ app.config.update(
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE", "false").lower() == "true",
 )
-
 DATABASE_URL = os.environ.get("DATABASE_URL")
 if not DATABASE_URL:
     if os.environ.get("VERCEL"):
-        DATABASE_URL = "sqlite:////tmp/tenangtugas.db"
-    else:
-        DATABASE_URL = "sqlite:///app.db"
+        raise RuntimeError("DATABASE_URL belum diatur di Environment Variables Vercel.")
+    DATABASE_URL = "sqlite:///app.db"
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
 elif DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
+
 engine_options = {"pool_pre_ping": True}
 if DATABASE_URL.startswith("sqlite:"):
     engine_options["connect_args"] = {"check_same_thread": False}
+else:
+    # Wajib untuk pooler Supabase (port 6543, mode transaction)
+    engine_options["connect_args"] = {"prepare_threshold": None}
+    if os.environ.get("VERCEL"):
+        engine_options["poolclass"] = NullPool
 engine = create_engine(DATABASE_URL, **engine_options)
 
 with engine.begin() as koneksi:
@@ -57,6 +67,11 @@ with engine.begin() as koneksi:
             state_data TEXT NOT NULL
         )
     """))
+    if not DATABASE_URL.startswith("sqlite:"):
+        # Jaga-jaga kalau tabel users di Supabase belum punya kolom state_data
+        koneksi.execute(text(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS state_data TEXT NOT NULL DEFAULT '{}'"
+        ))
 
 # GANTI DENGAN LINK ASLI KONSELING KAMPUSMU
 KONSELING_URL = "https://www.example.ac.id/layanan-konseling"
