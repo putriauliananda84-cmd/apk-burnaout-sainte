@@ -700,7 +700,7 @@ ctx.onstatechange=otomatis;otomatis();
 function pertama(e){if(e.target.closest&&e.target.closest('#stop_suara,#putar_suara,a'))return;
   if(!sudah&&!dimatikan)ctx.resume().then(otomatis)}
 document.addEventListener('click',pertama);document.addEventListener('keydown',pertama);
-setTimeout(()=>{if(!sudah&&!dimatikan)info.textContent='Browser menahan suara otomatis. Klik di mana saja pada halaman untuk membunyikan pengingat.'},600);
+setTimeout(()=>{if(!sudah&&!dimatikan)info.textContent='Browser menahan suara otomatis. Klik di mana saja pada halaman untuk membunyikan pengingat.mp3'},600);
 })();
 </script>"""
 
