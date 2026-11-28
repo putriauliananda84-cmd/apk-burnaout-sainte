@@ -330,7 +330,9 @@ def wajib_masuk(f):
 
 @app.context_processor
 def konteks():
-    return dict(user=g.user, fmt_tgl=fmt_tgl, fmt_menit=fmt_menit, css=CSS, endpoint=request.endpoint,
+    jml_aktif = len(aktif()) if g.user else 0
+    jml_mendesak = len(tugas_mendesak()) if g.user else 0
+    return dict(jml_aktif=jml_aktif, jml_mendesak=jml_mendesak, user=g.user, fmt_tgl=fmt_tgl, fmt_menit=fmt_menit, css=CSS, endpoint=request.endpoint,
                 MOODS=MOODS, MOOD_EMOJI=MOOD_EMOJI, KESULITAN=KESULITAN, sisa_hari=sisa_hari,
                 kuadran=kuadran, jam_tugas=jam_tugas, fmt_tenggat=fmt_tenggat,
                 terlambat=terlambat, NAMA_KUADRAN=NAMA_KUADRAN, KONSELING_URL=KONSELING_URL)
@@ -702,6 +704,139 @@ aside a.m:hover{background:#fff;transform:translateX(5px)}
 @media(max-width:850px){.app{flex-direction:column}aside{width:100%;height:auto;position:static}.grid2,.grid3,.grid4,.auth{grid-template-columns:1fr}}
 """
 
+# ----------------------------------------------------------------------------
+# Motion dan interaksi (hanya di halaman setelah masuk)
+# ----------------------------------------------------------------------------
+UI_CSS = """
+/* Antigravity: gelembung dan daun melayang naik */
+.antigravitasi{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+.antigravitasi i{position:absolute;bottom:-90px;left:var(--x);width:var(--s);height:var(--s);font-style:normal;font-size:var(--s);line-height:1;opacity:0;animation:melayang var(--d) linear var(--t) infinite}
+.antigravitasi i:empty{border-radius:50%;background:radial-gradient(circle at 30% 30%,#fff,#bcd5c4)}
+@keyframes melayang{10%{opacity:.55}50%{transform:translate(35px,-55vh) rotate(160deg)}90%{opacity:.35}100%{transform:translate(-20px,-118vh) rotate(340deg);opacity:0}}
+.tanpa-gerak .antigravitasi{display:none}.tanpa-gerak .logo:before{animation:none}
+main{position:relative;z-index:1;min-width:0}
+/* Micro animation */
+.logo:before{display:inline-block;margin-right:6px;animation:apung 3.5s ease-in-out infinite}
+@keyframes apung{50%{transform:translateY(-5px) rotate(12deg)}}
+.moods span{transition:transform .2s ease,background-color .2s}.moods label:hover span{transform:translateY(-4px)}
+.moods input:checked+span b{animation:pop .45s ease}
+input[type=checkbox]:checked{animation:pop .35s ease}
+@keyframes pop{45%{transform:scale(1.35)}}
+input,select,textarea{transition:border-color .2s,box-shadow .2s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--g);box-shadow:0 0 0 4px rgba(47,93,74,.18)}
+/* Visual feedback */
+.btn,.tab-bawah a,.pil{position:relative;overflow:hidden}
+.riak{position:absolute;border-radius:50%;background:currentColor;opacity:.25;pointer-events:none;animation:riak .6s ease-out forwards}
+@keyframes riak{from{transform:scale(0)}to{transform:scale(2.5);opacity:0}}
+.btn.proses{pointer-events:none;opacity:.8}
+.btn.proses::before{content:"";display:inline-block;width:12px;height:12px;margin-right:8px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:putar .7s linear infinite;vertical-align:-1px}
+@keyframes putar{to{transform:rotate(360deg)}}
+.flash{animation:masuk .45s ease}@keyframes masuk{from{opacity:0;transform:translateY(-14px)}}
+/* Scroll craft */
+.kemajuan{position:fixed;top:0;left:0;height:4px;width:100%;background:linear-gradient(90deg,var(--g),#dfa93d);transform-origin:left;transform:scaleX(0);z-index:60}
+/* Skeleton screen saat pindah halaman */
+.kerangka{display:none}.sedang-pindah main>:not(.kerangka){display:none!important}
+.sedang-pindah .kerangka{display:block}
+.tulang{position:relative;overflow:hidden;background:#e6e3d6;border-radius:16px;margin-bottom:16px}
+.tulang::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.75) 50%,transparent 70%);transform:translateX(-100%);animation:shimmer 1.3s infinite}
+.kerangka .baris{display:grid;grid-template-columns:1.6fr 1fr;gap:20px}
+/* Floating pill */
+.pil-wadah{position:fixed;right:22px;bottom:22px;z-index:40;display:flex;align-items:center;gap:4px;padding:6px;border-radius:99px;background:rgba(31,45,38,.94);box-shadow:0 12px 30px rgba(31,45,38,.3);animation:naik .5s ease}
+@keyframes naik{from{opacity:0;transform:translateY(30px)}}
+.pil{display:inline-flex;align-items:center;gap:6px;border:0;border-radius:99px;padding:10px 15px;background:transparent;color:#fff;font:700 13px 'Segoe UI',system-ui,sans-serif;text-decoration:none;cursor:pointer}
+.pil:hover{background:rgba(255,255,255,.14);color:#fff}.pil.gawat{background:#b3261e}
+.pil kbd{font-size:11px;border:1px solid rgba(255,255,255,.4);border-radius:5px;padding:1px 5px}
+main{padding-bottom:100px}
+/* Bottom tab bar (layar HP) */
+.tab-bawah{display:none}
+/* Command palette */
+dialog.palet{width:min(540px,92vw);margin-top:12vh;padding:0;border:1px solid var(--line);border-radius:20px;background:#fff;color:var(--dark);box-shadow:0 30px 70px rgba(31,45,38,.35)}
+dialog.palet[open]{animation:muncul .2s ease}@keyframes muncul{from{opacity:0;transform:scale(.95) translateY(-10px)}}
+dialog.palet::backdrop{background:rgba(31,45,38,.45);backdrop-filter:blur(4px)}
+.palet input{border:0;border-bottom:1px solid var(--line);border-radius:0;margin:0;padding:18px 20px;background:#fff;box-shadow:none!important}
+.palet ul{list-style:none;margin:0;padding:8px;max-height:48vh;overflow:auto}
+.palet li{padding:12px 14px;border-radius:12px;cursor:pointer}.palet li[aria-selected=true]{background:var(--lg);font-weight:700}
+.palet p{margin:0;padding:10px 20px 14px;font-size:12px;color:var(--gray)}
+@media(max-width:850px){
+.app{display:block}aside{padding:14px 16px}aside a.m{display:none}aside .logo{margin-bottom:8px}aside .bawah{flex-direction:row;margin:0}aside .bawah a{flex:1;font-size:12px}
+main{padding:22px 16px 170px}.kerangka .baris{grid-template-columns:1fr}
+.tab-bawah{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:45;background:rgba(255,255,255,.96);border-top:1px solid var(--line);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+.tab-bawah a{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0;border-radius:14px;font-size:11px;color:var(--gray);text-decoration:none}
+.tab-bawah a b{font-size:20px;transition:transform .25s}.tab-bawah a.on{background:var(--lg);color:var(--g);font-weight:700}.tab-bawah a.on b{transform:translateY(-3px) scale(1.12)}
+.pil-wadah{right:50%;transform:translateX(50%);bottom:calc(80px + env(safe-area-inset-bottom));white-space:nowrap;animation:none}.pil kbd{display:none}
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important}.antigravitasi{display:none}}
+"""
+
+UI_HTML = """
+<div class="kemajuan" id="kemajuan" aria-hidden="true"></div>
+<div class="antigravitasi" aria-hidden="true">
+{% for x, ukuran, durasi, tunda, isi in [(6,18,19,0,''),(17,24,24,-9,'🍃'),(29,34,28,-17,''),(41,14,17,-4,''),(53,22,26,-20,'🌿'),(64,44,32,-11,''),(76,16,20,-15,''),(86,26,23,-2,'🍃'),(94,28,29,-23,'')] %}<i style="--x:{{ x }}%;--s:{{ ukuran }}px;--d:{{ durasi }}s;--t:{{ tunda }}s">{{ isi }}</i>{% endfor %}</div>
+<div class="pil-wadah">
+<a class="pil {{ 'gawat' if jml_mendesak }}" href="{{ url_for('tugas', f='mendesak' if jml_mendesak else 'minggu') }}">{% if jml_mendesak %}⏰ {{ jml_mendesak }} mendesak{% else %}📝 {{ jml_aktif }} tugas aktif{% endif %}</a>
+<button type="button" class="pil" id="buka_palet" aria-haspopup="dialog">🔍 Cari <kbd>Ctrl K</kbd></button></div>
+<nav class="tab-bawah" aria-label="Menu bawah">
+{% for ep, ikon, nama in [('beranda','🏠','Beranda'),('tugas','📝','Tugas'),('rencana','🗓️','Rencana'),('ruang_tenang','🌿','Tenang'),('profil','👤','Profil')] %}<a class="{{ 'on' if endpoint==ep }}" href="{{ url_for(ep) }}" {% if endpoint==ep %}aria-current="page"{% endif %}><b aria-hidden="true">{{ ikon }}</b>{{ nama }}</a>{% endfor %}</nav>
+<dialog class="palet" id="palet" aria-label="Pencarian perintah">
+<input id="palet_cari" placeholder="Mau ke mana? Ketik perintah..." autocomplete="off" role="combobox" aria-expanded="true" aria-controls="palet_daftar" aria-label="Cari perintah">
+<ul id="palet_daftar" role="listbox">
+{% for ep, nama in [('beranda','🏠 Beranda'),('tugas','📝 Tugas'),('braindump','🧠 Brain Dump: tulis tugas'),('pemecah','🧩 Pecah tugas jadi langkah kecil'),('rencana','⏱️ Rencana Harian dan Mode Fokus'),('ruang_tenang','🌿 Ruang Tenang: napas dan musik'),('profil','👤 Profil dan Refleksi'),('darurat','🆘 Butuh bantuan (Mode Darurat)'),('panduan','📖 Lihat panduan')] %}<li role="option" id="cmd_{{ ep }}" data-url="{{ url_for(ep) }}">{{ nama }}</li>{% endfor %}
+<li role="option" id="cmd_gerak" data-aksi="gerak">🎈 Nyalakan atau matikan efek melayang</li>
+<li role="option" id="cmd_keluar" data-url="{{ url_for('keluar') }}">🚪 Logout</li></ul>
+<p id="palet_info" aria-live="polite">↑↓ pilih · Enter buka · Esc tutup</p></dialog>
+<script>
+(function(){
+const html=document.documentElement,tenang=matchMedia('(prefers-reduced-motion: reduce)').matches;
+try{if(localStorage.getItem('tanpaGerak')==='1')html.classList.add('tanpa-gerak')}catch(e){}
+
+// Skeleton screen: muncul kalau halaman berikutnya agak lama dimuat
+const main=document.querySelector('main');
+main.insertAdjacentHTML('beforeend','<div class="kerangka" role="status" aria-label="Memuat halaman"><div class="tulang" style="height:36px;width:45%"></div><div class="tulang" style="height:18px;width:70%"></div><div class="baris"><div class="tulang" style="height:260px"></div><div class="tulang" style="height:180px"></div></div><div class="tulang" style="height:130px"></div></div>');
+let jam;
+function pindah(){clearTimeout(jam);jam=setTimeout(()=>{html.classList.add('sedang-pindah');scrollTo(0,0)},150)}
+addEventListener('pageshow',()=>{clearTimeout(jam);html.classList.remove('sedang-pindah');document.querySelectorAll('.proses').forEach(b=>b.classList.remove('proses'))});
+document.addEventListener('click',e=>{const a=e.target.closest('a[href]');
+  if(!a||e.defaultPrevented||e.button||e.ctrlKey||e.metaKey||e.shiftKey||a.target||a.hasAttribute('download'))return;
+  if(a.origin!==location.origin||a.getAttribute('href').startsWith('#'))return;pindah()});
+
+// Visual feedback: riak saat ditekan, putaran saat menyimpan
+document.addEventListener('pointerdown',e=>{const t=e.target.closest('.btn,.tab-bawah a,.pil');if(!t||tenang)return;
+  const k=t.getBoundingClientRect(),d=Math.max(k.width,k.height),s=document.createElement('span');s.className='riak';
+  s.style.cssText=`width:${d}px;height:${d}px;left:${e.clientX-k.left-d/2}px;top:${e.clientY-k.top-d/2}px`;t.appendChild(s);setTimeout(()=>s.remove(),650)});
+document.addEventListener('submit',e=>{if(e.defaultPrevented)return;const b=e.submitter||e.target.querySelector('button.btn');if(b)b.classList.add('proses')});
+
+// Scroll craft: garis kemajuan dan kartu yang muncul saat digulir
+const garis=document.getElementById('kemajuan');
+function ukur(){const m=html.scrollHeight-innerHeight;garis.style.transform=`scaleX(${m>0?Math.min(1,scrollY/m):0})`}
+addEventListener('scroll',ukur,{passive:true});addEventListener('resize',ukur);ukur();
+if(!tenang&&'IntersectionObserver' in window){
+  const lihat=new IntersectionObserver(daftar=>{let n=0;daftar.forEach(d=>{if(!d.isIntersecting)return;lihat.unobserve(d.target);
+    d.target.animate([{opacity:0,translate:'0 28px'},{opacity:1,translate:'0 0'}],{duration:550,delay:Math.min(n++,5)*70,easing:'cubic-bezier(.2,.7,.2,1)',fill:'backwards'})})},{threshold:.08});
+  main.querySelectorAll('.card,.fitur,.profil').forEach(el=>lihat.observe(el));
+}
+
+// Command palette
+const palet=document.getElementById('palet'),cari=document.getElementById('palet_cari'),semua=[...palet.querySelectorAll('li')];let tampil=semua,aktif=0;
+function tandai(){semua.forEach(li=>li.setAttribute('aria-selected','false'));const li=tampil[aktif];
+  if(li){li.setAttribute('aria-selected','true');cari.setAttribute('aria-activedescendant',li.id);li.scrollIntoView({block:'nearest'})}else cari.removeAttribute('aria-activedescendant')}
+function saring(){const q=cari.value.trim().toLowerCase();semua.forEach(li=>li.hidden=!li.textContent.toLowerCase().includes(q));tampil=semua.filter(li=>!li.hidden);aktif=0;tandai();
+  document.getElementById('palet_info').textContent=tampil.length?'↑↓ pilih · Enter buka · Esc tutup':'Tidak ada perintah yang cocok.'}
+function buka(){if(palet.open){palet.close();return}cari.value='';saring();palet.showModal();cari.focus()}
+function jalankan(li){if(!li)return;palet.close();
+  if(li.dataset.aksi==='gerak'){const mati=html.classList.toggle('tanpa-gerak');try{localStorage.setItem('tanpaGerak',mati?'1':'0')}catch(e){}return}
+  pindah();location.href=li.dataset.url}
+document.getElementById('buka_palet').onclick=buka;
+cari.addEventListener('input',saring);
+cari.addEventListener('keydown',e=>{if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();if(tampil.length){aktif=(aktif+(e.key==='ArrowDown'?1:-1)+tampil.length)%tampil.length;tandai()}}
+  else if(e.key==='Enter'){e.preventDefault();jalankan(tampil[aktif])}});
+semua.forEach(li=>li.onclick=()=>jalankan(li));
+palet.addEventListener('click',e=>{if(e.target===palet)palet.close()});
+document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();buka()}});
+})();
+</script>
+"""
+CSS += UI_CSS
+
 PAGES = {}
 
 # Suara pengingat: memutar static/pengingat.mp3; kalau file tidak ada, bunyi "ting-ting"
@@ -937,6 +1072,7 @@ PAGES["darurat.html"] = """{% extends 'base.html' %}{% block content %}<h1>Mode 
 <a class="btn" href="{{ KONSELING_URL }}" target="_blank" rel="noopener">Buka layanan konseling kampus</a></div>
 <p class="meta">Web ini bukan pengganti layanan kesehatan mental.</p>""" + NAPAS_JS + """{% endblock %}"""
 
+PAGES["base.html"] = PAGES["base.html"].replace("</main></div>{% endblock %}", "</main></div>" + UI_HTML + "{% endblock %}")
 app.jinja_loader = DictLoader(PAGES)
 
 if __name__ == "__main__":
